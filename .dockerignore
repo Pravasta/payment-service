@@ -1,0 +1,10 @@
+.git
+docs
+scripts
+bin
+*.md
+.env
+.env.*
+*.local
+.mcp.json
+.DS_Store
