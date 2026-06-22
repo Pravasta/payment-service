@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: payment-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: payment_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_service"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: payment-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Konfigurasi via environment variable (lihat .env.example).
+      APP_ENV: production
+      DATABASE_HOST: postgres
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: payment_service
+      PAYMENTS_MASTER_KEY: "change-me-32-bytes-min-in-prod!!"
+      DOKU_CLIENT_ID: "${DOKU_CLIENT_ID:-}"
+      DOKU_SECRET_KEY: "${DOKU_SECRET_KEY:-}"
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
