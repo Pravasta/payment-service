@@ -1,6 +1,6 @@
 # 0001 — Lengkapi data model & migrasi (sisa tabel)
 
-- **Status:** todo
+- **Status:** done
 - **Prioritas:** high
 - **Estimasi:** M
 - **Depends on:** —
@@ -13,18 +13,28 @@ lain di detailed-design §2 belum ada, padahal dibutuhkan auth, webhook, dan out
 
 ## Scope
 
-- [ ] GORM model + `TableName()` untuk: `merchant`, `api_credential`,
+- [x] GORM model + `TableName()` untuk: `merchant`, `api_credential`,
       `webhook_endpoint`, `gateway_account`, `webhook_inbox`, `notification_outbox`.
-- [ ] Tambahkan ke `cmd/migrate` AutoMigrate.
-- [ ] Index & unique constraint sesuai §2 (mis. `UNIQUE(app_id, external_reference)`,
-      `UNIQUE(gateway_event_id) WHERE NOT NULL`).
-- [ ] Pisahkan model DB dari entity domain bila modul terkait sudah butuh.
+- [x] Tambahkan ke `cmd/migrate` AutoMigrate.
+- [x] Index & unique constraint sesuai §2 (`UNIQUE(app_id, external_reference)`,
+      partial `UNIQUE(gateway_event_id) WHERE <> ''`, dll).
+- [x] Pisahkan model DB dari entity domain (model package terpisah, sudah dipakai).
 
 ## Acceptance criteria
 
-- [ ] `make migrate` membuat semua tabel tanpa error pada Postgres bersih.
-- [ ] Constraint unik & index terbukti ada (cek `\d+ <table>` di psql).
-- [ ] `go build ./...` & `go vet ./...` hijau.
+- [x] `make migrate` membuat 9 tabel tanpa error pada Postgres bersih.
+- [x] Constraint unik & index terbukti ada; dedup partial index diuji fungsional
+      (banyak `''` lolos, duplikat non-kosong ditolak).
+- [x] `go build ./...` & `go vet ./...` hijau.
+
+## Catatan implementasi
+
+- `transaction_event.gateway_event_id` bertipe `string` (default `''`) → partial
+  unique index dibuat eksplisit di `cmd/migrate` dengan `WHERE gateway_event_id <> ''`
+  (padanan "NOT NULL" untuk kolom string; tag GORM tak bisa partial index).
+- `api_credential.scopes` disimpan via `serializer:json` (bukan native `text[]`)
+  agar tanpa dependensi array driver; cukup untuk MVP.
+- Secret (`signing_secret_enc`, `config_enc`) kolom `bytea` — enkripsi diisi di issue 0002.
 
 ## File terkait
 

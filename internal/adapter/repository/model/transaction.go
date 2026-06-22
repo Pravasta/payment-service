@@ -56,10 +56,11 @@ type TransactionEvent struct {
 	ToStatus       string
 	AmountMinor    int64
 	Source         string
-	GatewayEventID string  `gorm:"uniqueIndex"` // dedup webhook (NULL diizinkan banyak)
-	Payload        JSONMap `gorm:"type:jsonb"`
-	OccurredAt     time.Time
-	CreatedAt      time.Time
+	GatewayEventID string `gorm:"index"` // dedup webhook; partial UNIQUE WHERE NOT NULL dibuat di cmd/migrate
+
+	Payload    JSONMap `gorm:"type:jsonb"`
+	OccurredAt time.Time
+	CreatedAt  time.Time
 }
 
 func (TransactionEvent) TableName() string { return "transaction_event" }

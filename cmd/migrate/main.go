@@ -25,14 +25,30 @@ func main() {
 	}
 
 	if err := db.AutoMigrate(
+		&model.Merchant{},
+		&model.APICredential{},
+		&model.WebhookEndpoint{},
+		&model.GatewayAccount{},
 		&model.Transaction{},
 		&model.TransactionEvent{},
 		&model.Refund{},
-		// TODO: merchant, api_credential, webhook_endpoint, gateway_account,
-		//       webhook_inbox, notification_outbox (detailed-design §2).
+		&model.WebhookInbox{},
+		&model.NotificationOutbox{},
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "migrate error:", err)
 		os.Exit(1)
 	}
+
+	// Partial unique index untuk dedup webhook: gateway_event_id unik hanya saat
+	// terisi (detailed-design §2.6). Kolom bertipe string (default ''), jadi
+	// padanan "WHERE NOT NULL" adalah "<> ''". Tidak bisa via tag GORM.
+	if err := db.Exec(
+		`CREATE UNIQUE INDEX IF NOT EXISTS uq_txn_event_gateway_event_id ` +
+			`ON transaction_event (gateway_event_id) WHERE gateway_event_id <> ''`,
+	).Error; err != nil {
+		fmt.Fprintln(os.Stderr, "migrate error (partial index):", err)
+		os.Exit(1)
+	}
+
 	fmt.Println("migrate: ok")
 }
