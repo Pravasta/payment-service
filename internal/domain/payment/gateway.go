@@ -51,9 +51,9 @@ type ChargeResult struct {
 
 // WebhookPayload adalah notifikasi mentah dari gateway (untuk verifikasi signature).
 type WebhookPayload struct {
-	Headers   map[string]string
-	RawBody   []byte
-	URLPath   string // Request-Target untuk verifikasi signature (spec §1)
+	Headers map[string]string
+	RawBody []byte
+	URLPath string // Request-Target untuk verifikasi signature (spec §1)
 }
 
 // WebhookEvent adalah event canonical hasil parsing webhook.
@@ -93,12 +93,12 @@ const (
 
 // RefundRequest adalah input canonical refund.
 type RefundRequest struct {
-	ExternalReference   string
-	OriginalRequestID   string // DOKU payment.original_request_id
-	AmountMinor         int64
-	Currency            string
-	Reason              string
-	Type                RefundType
+	ExternalReference string
+	OriginalRequestID string // DOKU payment.original_request_id
+	AmountMinor       int64
+	Currency          string
+	Reason            string
+	Type              RefundType
 }
 
 // RefundResult adalah hasil canonical refund.

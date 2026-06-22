@@ -13,23 +13,23 @@ import (
 type Status string
 
 const (
-	StatusCreated            Status = "created"
-	StatusPending            Status = "pending"
-	StatusPaid               Status = "paid"
-	StatusSettled            Status = "settled"
-	StatusExpired            Status = "expired"
-	StatusFailed             Status = "failed"
-	StatusPartiallyRefunded  Status = "partially_refunded"
-	StatusRefunded           Status = "refunded"
+	StatusCreated           Status = "created"
+	StatusPending           Status = "pending"
+	StatusPaid              Status = "paid"
+	StatusSettled           Status = "settled"
+	StatusExpired           Status = "expired"
+	StatusFailed            Status = "failed"
+	StatusPartiallyRefunded Status = "partially_refunded"
+	StatusRefunded          Status = "refunded"
 )
 
 // allowedTransitions mendefinisikan transisi maju yang sah. Transisi di luar ini
 // ditolak (anti out-of-order/duplikat — mis. webhook `expired` setelah `paid`).
 var allowedTransitions = map[Status]map[Status]bool{
-	StatusCreated: {StatusPending: true, StatusFailed: true},
-	StatusPending: {StatusPaid: true, StatusExpired: true, StatusFailed: true},
-	StatusPaid:    {StatusSettled: true, StatusPartiallyRefunded: true, StatusRefunded: true},
-	StatusSettled: {StatusPartiallyRefunded: true, StatusRefunded: true},
+	StatusCreated:           {StatusPending: true, StatusFailed: true},
+	StatusPending:           {StatusPaid: true, StatusExpired: true, StatusFailed: true},
+	StatusPaid:              {StatusSettled: true, StatusPartiallyRefunded: true, StatusRefunded: true},
+	StatusSettled:           {StatusPartiallyRefunded: true, StatusRefunded: true},
 	StatusPartiallyRefunded: {StatusPartiallyRefunded: true, StatusRefunded: true},
 	// terminal: expired, failed, refunded
 }
@@ -74,13 +74,13 @@ type Transaction struct {
 	Description string
 
 	// lifecycle
-	ExpiresAt  *time.Time // diisi dari expired_date_utc DOKU (spec §6), bukan lokal
-	PaidAt     *time.Time
-	SettledAt  *time.Time
-	FailedAt   *time.Time
-	ExpiredAt  *time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ExpiresAt *time.Time // diisi dari expired_date_utc DOKU (spec §6), bukan lokal
+	PaidAt    *time.Time
+	SettledAt *time.Time
+	FailedAt  *time.Time
+	ExpiredAt *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // RefundableAmount mengembalikan sisa yang masih bisa di-refund.

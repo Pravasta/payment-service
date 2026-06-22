@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	domain "github.com/Pravasta/payment-service/internal/domain/payment"
 	"github.com/Pravasta/payment-service/internal/adapter/repository/model"
+	domain "github.com/Pravasta/payment-service/internal/domain/payment"
 )
 
 // PaymentRepository implementasi GORM dari domain.Repository.

@@ -1,4 +1,4 @@
-.PHONY: help setup tidy build run dev worker migrate test fmt vet db-up db-down up down
+.PHONY: help setup tidy build run dev worker migrate test fmt vet lint db-up db-down up down
 
 help:
 	@echo "Targets:"
@@ -11,6 +11,7 @@ help:
 	@echo "  migrate  - jalankan GORM AutoMigrate"
 	@echo "  test     - go test ./..."
 	@echo "  fmt/vet  - format & vet"
+	@echo "  lint     - golangci-lint run (perlu golangci-lint terpasang)"
 	@echo "  db-up    - start hanya Postgres (docker compose)"
 	@echo "  up/down  - start/stop semua service (docker compose)"
 
@@ -46,6 +47,10 @@ fmt:
 
 vet:
 	go vet ./...
+
+lint:
+	@command -v golangci-lint >/dev/null 2>&1 || (echo "golangci-lint belum terpasang: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" && exit 1)
+	golangci-lint run
 
 db-up:
 	docker compose up -d postgres

@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	httpadapter "github.com/Pravasta/payment-service/internal/adapter/http"
 	"github.com/Pravasta/payment-service/internal/adapter/gateway/doku"
+	httpadapter "github.com/Pravasta/payment-service/internal/adapter/http"
 	"github.com/Pravasta/payment-service/internal/adapter/repository"
 	"github.com/Pravasta/payment-service/internal/infrastructure/config"
 	"github.com/Pravasta/payment-service/internal/infrastructure/database"

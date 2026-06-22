@@ -10,11 +10,11 @@ import (
 
 // Transaction adalah GORM model untuk tabel `transaction` (detailed-design §2.5).
 type Transaction struct {
-	ID                uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	AppID             uuid.UUID  `gorm:"type:uuid;not null;index:idx_txn_app_status_created,priority:1"`
-	ExternalReference string     `gorm:"not null;uniqueIndex:uq_txn_app_extref,priority:2"`
-	IdempotencyKey    string     `gorm:"uniqueIndex:uq_txn_app_idem,priority:2"`
-	Status            string     `gorm:"not null;index:idx_txn_app_status_created,priority:2"`
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey"`
+	AppID             uuid.UUID `gorm:"type:uuid;not null;index:idx_txn_app_status_created,priority:1"`
+	ExternalReference string    `gorm:"not null;uniqueIndex:uq_txn_app_extref,priority:2"`
+	IdempotencyKey    string    `gorm:"uniqueIndex:uq_txn_app_idem,priority:2"`
+	Status            string    `gorm:"not null;index:idx_txn_app_status_created,priority:2"`
 
 	Currency         string `gorm:"type:char(3);not null;default:'IDR'"`
 	CurrencyExponent int16  `gorm:"not null;default:0"`

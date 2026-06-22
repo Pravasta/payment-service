@@ -1,0 +1,23 @@
+# Konfigurasi golangci-lint (format v2).
+# Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+# Jalankan: make lint
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - misspell # salah ketik di komentar/string
+    - revive # gaya & best-practice umum Go
+    - bodyclose # http.Response.Body harus ditutup
+    - rowserrcheck # cek error pada sql.Rows
+  exclusions:
+    rules:
+      # File test boleh lebih longgar.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
