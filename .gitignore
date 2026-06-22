@@ -1,0 +1,27 @@
+# Secrets & environment
+.env
+.env.*
+*.local
+.mcp.json
+.mcp.local.json
+secrets/
+*.pem
+*.key
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Build / deps
+node_modules/
+dist/
+tmp/
