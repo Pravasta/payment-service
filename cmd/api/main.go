@@ -15,6 +15,7 @@ import (
 	httpadapter "github.com/Pravasta/payment-service/internal/adapter/http"
 	"github.com/Pravasta/payment-service/internal/adapter/repository"
 	"github.com/Pravasta/payment-service/internal/infrastructure/config"
+	"github.com/Pravasta/payment-service/internal/infrastructure/crypto"
 	"github.com/Pravasta/payment-service/internal/infrastructure/database"
 	"github.com/Pravasta/payment-service/internal/infrastructure/logger"
 	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
@@ -35,8 +36,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse master key (AES-GCM untuk enkripsi secret at-rest).
+	// Boleh kosong di development; wajib terisi di production (sudah divalidasi config.Load).
+	var masterKey []byte
+	if cfg.Security.MasterKey != "" {
+		masterKey, err = crypto.KeyFromHex(cfg.Security.MasterKey)
+		if err != nil {
+			log.Error("master key tidak valid", "err", err)
+			os.Exit(1)
+		}
+	}
+
 	// Wiring Clean Architecture: adapter -> usecase -> delivery.
 	paymentRepo := repository.NewPaymentRepository(db)
+	credRepo := repository.NewCredentialRepository(db)
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
@@ -53,7 +66,7 @@ func main() {
 	}
 	ready := func(ctx context.Context) error { return sqlDB.PingContext(ctx) }
 
-	router := httpadapter.NewRouter(paymentSvc, ready)
+	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
