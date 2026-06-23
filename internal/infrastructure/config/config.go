@@ -118,6 +118,15 @@ func (c *Config) validate() error {
 	if c.Database.Host == "" || c.Database.Name == "" {
 		return fmt.Errorf("config: DATABASE_HOST & DATABASE_NAME wajib diisi")
 	}
+	if c.App.Env == "production" {
+		if c.Security.MasterKey == "" {
+			return fmt.Errorf("config: PAYMENTS_MASTER_KEY wajib diisi di production")
+		}
+		// 32 byte = 64 hex char; panjang ganjil pasti bukan hex valid.
+		if len(c.Security.MasterKey) != 64 {
+			return fmt.Errorf("config: PAYMENTS_MASTER_KEY harus 64 karakter hex (32 byte), dapat %d karakter", len(c.Security.MasterKey))
+		}
+	}
 	return nil
 }
 
