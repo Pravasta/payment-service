@@ -1,6 +1,6 @@
 # 0003 — Auth middleware (API key + HMAC signing)
 
-- **Status:** todo
+- **Status:** done
 - **Prioritas:** high
 - **Estimasi:** M
 - **Depends on:** 0001, 0002
@@ -14,19 +14,19 @@ via `X-Timestamp`). Hasil auth menetapkan `app_id` untuk scope semua query.
 
 ## Scope
 
-- [ ] Middleware auth: validasi `Authorization` (key_id+secret) → lookup
+- [x] Middleware auth: validasi `Authorization` (key_id+secret) → lookup
       `api_credential` → cek argon2id hash + status active.
-- [ ] (Opsional aktif untuk Invoice SaaS) verifikasi HMAC `X-Signature` +
+- [x] (Opsional aktif untuk Invoice SaaS) verifikasi HMAC `X-Signature` +
       `X-Timestamp` (tolak skew > N menit).
-- [ ] Set `app_id` & scopes ke context; helper `AppIDFromContext`.
-- [ ] Enforce scope per endpoint (mis. `payments:write`).
+- [x] Set `app_id` & scopes ke context; helper `AppIDFromContext`.
+- [x] Enforce scope per endpoint (mis. `payments:write`).
 
 ## Acceptance criteria
 
-- [ ] Request tanpa/`key` salah → `401`; scope kurang → `403`.
-- [ ] HMAC salah / timestamp basi → `401`.
-- [ ] Handler hilir bisa membaca `app_id` dari context.
-- [ ] Unit test untuk verifikasi key & HMAC.
+- [x] Request tanpa/`key` salah → `401`; scope kurang → `403`.
+- [x] HMAC salah / timestamp basi → `401`.
+- [x] Handler hilir bisa membaca `app_id` dari context.
+- [x] Unit test untuk verifikasi key & HMAC.
 
 ## File terkait
 
