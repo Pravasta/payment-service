@@ -1,6 +1,6 @@
 # 0008 — Webhook receiver DOKU + ParseWebhook + state machine
 
-- **Status:** todo
+- **Status:** done
 - **Prioritas:** high
 - **Estimasi:** L
 - **Depends on:** 0006
@@ -13,23 +13,34 @@ transisi state machine, dan tulis outbox — semua idempoten & tahan out-of-orde
 
 ## Scope
 
-- [ ] `POST /v1/webhooks/doku`: simpan `webhook_inbox` (raw + headers + signature)
+- [x] `POST /v1/webhooks/doku`: simpan `webhook_inbox` (raw + headers + signature)
       **sebelum** verifikasi.
-- [ ] `doku.ParseWebhook`: verifikasi signature (`VerifySignature`), parse body,
+- [x] `doku.ParseWebhook`: verifikasi signature (`VerifySignature`), parse body,
       `mapStatus`, isi `PaymentMethod` dari `channel.id`, `GatewayEventID`←`Request-Id`.
-- [ ] Dedup `gateway_event_id` di `transaction_event` → ack & skip bila dobel.
-- [ ] Dalam satu transaksi DB: validasi `CanTransition` → update `transaction` →
-      insert `transaction_event` → insert `notification_outbox`.
-- [ ] Transisi ilegal (mis. `expired` setelah `paid`) → di-log sebagai event,
+- [x] Dedup `gateway_event_id` di `transaction_event` → ack & skip bila dobel.
+- [x] Dalam satu transaksi DB: validasi `CanTransition` → update `transaction` →
+      insert `transaction_event` → insert `notification_outbox` (`ApplyWebhook`).
+- [x] Transisi ilegal (mis. `expired` setelah `paid`) → di-log sebagai event audit,
       status tak berubah; tetap ack `2xx`.
 
 ## Acceptance criteria
 
-- [ ] Signature invalid → `401`, `verified=false`, tidak mengubah status.
-- [ ] Webhook dobel (Request-Id sama) → `2xx`, tanpa side-effect ganda.
-- [ ] Webhook out-of-order → status final tidak rusak.
-- [ ] `payment.paid` valid → status `paid`, event + outbox tertulis.
-- [ ] Test untuk dedup, transisi legal/ilegal, signature.
+- [x] Signature invalid → `401`, `verified=false`, tidak mengubah status.
+- [x] Webhook dobel (Request-Id sama) → `2xx`, tanpa side-effect ganda.
+- [x] Webhook out-of-order → status final tidak rusak.
+- [x] `payment.paid` valid → status `paid`, event + outbox tertulis.
+- [x] Test untuk dedup, transisi legal/ilegal, signature.
+
+## Catatan implementasi
+
+- Port `Repository` diperluas (bukan dependency baru) agar `Service`/wiring
+  tak berubah; `ApplyWebhook` menulis txn+event+outbox dalam satu `db.Transaction`.
+- Match transaksi: prioritas `gateway_request_id` (== DOKU `original_request_id`,
+  globally unique) lalu `gateway_txn_id` — hindari ambiguitas `external_reference`
+  yang hanya unik per app.
+- Txn tak dikenal / duplikat / transisi ilegal → tetap ack 2xx (cegah retry DOKU
+  tak berujung); transisi ilegal dicatat sebagai event audit (`applied:false`).
+- Pengiriman callback (outbox worker) = issue 0009.
 
 ## File terkait
 
