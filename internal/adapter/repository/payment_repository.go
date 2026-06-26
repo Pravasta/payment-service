@@ -53,6 +53,37 @@ func (r *PaymentRepository) GetByGatewayTxnID(ctx context.Context, gateway, gate
 	return r.first(ctx, "gateway = ? AND gateway_txn_id = ?", gateway, gatewayTxnID)
 }
 
+func (r *PaymentRepository) ListTransactions(ctx context.Context, f domain.ListFilter) ([]*domain.Transaction, error) {
+	q := r.db.WithContext(ctx).Model(&model.Transaction{}).Where("app_id = ?", f.AppID)
+	if f.Status != "" {
+		q = q.Where("status = ?", string(f.Status))
+	}
+	if f.From != nil {
+		q = q.Where("created_at >= ?", *f.From)
+	}
+	if f.To != nil {
+		q = q.Where("created_at <= ?", *f.To)
+	}
+	// Keyset pagination: ambil yang "lebih lama" dari cursor (urutan created_at DESC, id DESC).
+	if f.CursorCreated != nil && f.CursorID != nil {
+		q = q.Where("(created_at, id) < (?, ?)", *f.CursorCreated, *f.CursorID)
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var ms []model.Transaction
+	if err := q.Order("created_at DESC, id DESC").Limit(limit).Find(&ms).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Transaction, len(ms))
+	for i := range ms {
+		out[i] = toDomain(&ms[i])
+	}
+	return out, nil
+}
+
 func (r *PaymentRepository) AppendEvent(ctx context.Context, e *domain.TransactionEvent) error {
 	m := eventToModel(e)
 	if m.ID == uuid.Nil {

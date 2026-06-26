@@ -3,6 +3,7 @@ package payment_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -78,6 +79,42 @@ func (m *mockRepo) GetByIdempotencyKey(_ context.Context, appID uuid.UUID, k str
 
 func (m *mockRepo) GetByGatewayTxnID(_ context.Context, _, _ string) (*domain.Transaction, error) {
 	return nil, domain.ErrNotFound
+}
+
+// listRows dapat di-set test untuk mengontrol hasil ListTransactions.
+func (m *mockRepo) ListTransactions(_ context.Context, f domain.ListFilter) ([]*domain.Transaction, error) {
+	var out []*domain.Transaction
+	for _, t := range m.byID {
+		if t.AppID != f.AppID {
+			continue
+		}
+		if f.Status != "" && t.Status != f.Status {
+			continue
+		}
+		out = append(out, t)
+	}
+	// urut created_at DESC, id DESC (stabil) — meniru query repo.
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID.String() > out[j].ID.String()
+	})
+	// keyset cursor.
+	if f.CursorCreated != nil && f.CursorID != nil {
+		filtered := out[:0]
+		for _, t := range out {
+			if t.CreatedAt.Before(*f.CursorCreated) ||
+				(t.CreatedAt.Equal(*f.CursorCreated) && t.ID.String() < f.CursorID.String()) {
+				filtered = append(filtered, t)
+			}
+		}
+		out = filtered
+	}
+	if f.Limit > 0 && len(out) > f.Limit {
+		out = out[:f.Limit]
+	}
+	return out, nil
 }
 
 func (m *mockRepo) AppendEvent(_ context.Context, e *domain.TransactionEvent) error {
@@ -244,6 +281,89 @@ func TestCreatePayment_UnsupportedCurrency(t *testing.T) {
 	in.Currency = "USD"
 	if _, err := svc.CreatePayment(context.Background(), in); !errors.Is(err, domain.ErrUnsupportedCurrency) {
 		t.Fatalf("ingin ErrUnsupportedCurrency, dapat %v", err)
+	}
+}
+
+func TestGetPayment_Isolation(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewService(repo, nil, okGateway())
+	appA, appB := uuid.New(), uuid.New()
+
+	txn, err := svc.CreatePayment(context.Background(), validInput(appA))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// app pemilik bisa baca.
+	if _, err := svc.GetPayment(context.Background(), appA, txn.ID); err != nil {
+		t.Errorf("pemilik tidak bisa baca: %v", err)
+	}
+	// app lain → not found (isolasi per app_id).
+	if _, err := svc.GetPayment(context.Background(), appB, txn.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("app lain: ingin ErrNotFound, dapat %v", err)
+	}
+}
+
+func TestListPayments_ScopedAndPaginated(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewService(repo, nil, okGateway())
+	appA, appB := uuid.New(), uuid.New()
+
+	// Sisipkan 3 transaksi appA dengan created_at menurun, 1 transaksi appB.
+	base := time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC)
+	for i := range 3 {
+		_ = repo.Create(context.Background(), &domain.Transaction{
+			ID: uuid.New(), AppID: appA, ExternalReference: "A-" + string(rune('0'+i)),
+			Status: domain.StatusPending, CreatedAt: base.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	_ = repo.Create(context.Background(), &domain.Transaction{
+		ID: uuid.New(), AppID: appB, ExternalReference: "B-0",
+		Status: domain.StatusPending, CreatedAt: base,
+	})
+
+	// Halaman 1: limit 2 → 2 item, HasMore true.
+	page1, err := svc.ListPayments(context.Background(), usecase.ListPaymentsInput{AppID: appA, Limit: 2})
+	if err != nil {
+		t.Fatalf("list page1: %v", err)
+	}
+	if len(page1.Items) != 2 {
+		t.Fatalf("page1 items = %d, ingin 2", len(page1.Items))
+	}
+	if !page1.HasMore {
+		t.Error("page1 HasMore harus true")
+	}
+	if page1.NextCursorID == nil {
+		t.Fatal("page1 NextCursor nil")
+	}
+
+	// Halaman 2: pakai cursor → sisa 1 item, HasMore false.
+	page2, err := svc.ListPayments(context.Background(), usecase.ListPaymentsInput{
+		AppID: appA, Limit: 2,
+		CursorCreated: page1.NextCursorCreated, CursorID: page1.NextCursorID,
+	})
+	if err != nil {
+		t.Fatalf("list page2: %v", err)
+	}
+	if len(page2.Items) != 1 {
+		t.Errorf("page2 items = %d, ingin 1", len(page2.Items))
+	}
+	if page2.HasMore {
+		t.Error("page2 HasMore harus false")
+	}
+
+	// Scoping: appB hanya melihat miliknya.
+	listB, _ := svc.ListPayments(context.Background(), usecase.ListPaymentsInput{AppID: appB})
+	if len(listB.Items) != 1 {
+		t.Errorf("appB items = %d, ingin 1 (scoped)", len(listB.Items))
+	}
+}
+
+func TestListPayments_LimitClamped(t *testing.T) {
+	svc := usecase.NewService(newMockRepo(), nil, okGateway())
+	// limit di atas max → tidak error (di-clamp ke maxListLimit secara internal).
+	if _, err := svc.ListPayments(context.Background(), usecase.ListPaymentsInput{AppID: uuid.New(), Limit: 9999}); err != nil {
+		t.Fatalf("list: %v", err)
 	}
 }
 
