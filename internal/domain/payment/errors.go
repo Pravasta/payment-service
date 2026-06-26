@@ -9,4 +9,6 @@ var (
 	ErrRefundExceedsAmount = errors.New("payment: refund exceeds refundable amount")
 	ErrNotRefundable       = errors.New("payment: transaction is not in a refundable state")
 	ErrUnsupportedCurrency = errors.New("payment: unsupported currency")
+	ErrInvalidAmount       = errors.New("payment: amount must be greater than zero")
+	ErrDuplicateReference  = errors.New("payment: external_reference already used for this app")
 )

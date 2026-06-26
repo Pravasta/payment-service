@@ -68,6 +68,10 @@ func FromDomain(err error) *AppError {
 		return BadRequest("transaksi tidak dalam status yang bisa direfund")
 	case errors.Is(err, domain.ErrUnsupportedCurrency):
 		return BadRequest("mata uang tidak didukung")
+	case errors.Is(err, domain.ErrInvalidAmount):
+		return BadRequest("amount harus lebih besar dari nol")
+	case errors.Is(err, domain.ErrDuplicateReference):
+		return Conflict("external_reference sudah dipakai untuk app ini")
 	case errors.Is(err, domain.ErrInvalidTransition):
 		return UnprocessableEntity("transisi status pembayaran tidak valid")
 	default:
