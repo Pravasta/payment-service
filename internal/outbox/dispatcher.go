@@ -76,6 +76,20 @@ func DefaultConfig() Config {
 	}
 }
 
+// MetricsRecorder adalah port observability opsional untuk dispatcher.
+// Dideklarasikan di sisi konsumen agar package outbox tidak meng-import metrics.
+type MetricsRecorder interface {
+	ObserveOutbox(result string) // result: delivered/retry/dead
+}
+
+// Option mengonfigurasi Dispatcher saat konstruksi (functional options).
+type Option func(*Dispatcher)
+
+// WithMetrics memasang recorder metrik. Tanpa ini, instrumentasi di-skip (nil-safe).
+func WithMetrics(m MetricsRecorder) Option {
+	return func(d *Dispatcher) { d.metrics = m }
+}
+
 // Dispatcher memproses pesan outbox.
 type Dispatcher struct {
 	store     Store
@@ -83,6 +97,7 @@ type Dispatcher struct {
 	log       *slog.Logger
 	client    *http.Client
 	cfg       Config
+	metrics   MetricsRecorder
 
 	// injectable untuk test deterministik.
 	now  func() time.Time
@@ -91,11 +106,11 @@ type Dispatcher struct {
 
 // NewDispatcher membuat dispatcher. masterKey boleh nil bila tidak ada endpoint
 // yang memerlukan signing secret (mis. dev).
-func NewDispatcher(store Store, masterKey []byte, log *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(store Store, masterKey []byte, log *slog.Logger, cfg Config, opts ...Option) *Dispatcher {
 	if cfg.MaxAttempts == 0 {
 		cfg = DefaultConfig()
 	}
-	return &Dispatcher{
+	d := &Dispatcher{
 		store:     store,
 		masterKey: masterKey,
 		log:       log,
@@ -103,6 +118,17 @@ func NewDispatcher(store Store, masterKey []byte, log *slog.Logger, cfg Config) 
 		cfg:       cfg,
 		now:       time.Now,
 		rand:      rand.Float64,
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
+}
+
+// recordOutbox mencatat hasil dispatch ke metrik bila recorder terpasang.
+func (d *Dispatcher) recordOutbox(result string) {
+	if d.metrics != nil {
+		d.metrics.ObserveOutbox(result)
 	}
 }
 
@@ -123,12 +149,14 @@ func (d *Dispatcher) process(ctx context.Context, m Message) {
 	if err := d.deliver(ctx, m); err != nil {
 		attempts := m.Attempts + 1
 		if attempts >= d.cfg.MaxAttempts {
+			d.recordOutbox("dead")
 			if e := d.store.MarkDead(ctx, m.ID, attempts, err.Error()); e != nil {
 				d.log.Error("outbox: mark dead gagal", "id", m.ID, "err", e)
 			}
 			d.log.Error("outbox: pesan dead (lewat batas attempt)", "id", m.ID, "event_id", m.EventID, "err", err)
 			return
 		}
+		d.recordOutbox("retry")
 		next := d.now().UTC().Add(d.backoff(attempts))
 		if e := d.store.MarkRetry(ctx, m.ID, attempts, next, err.Error()); e != nil {
 			d.log.Error("outbox: mark retry gagal", "id", m.ID, "err", e)
@@ -136,6 +164,7 @@ func (d *Dispatcher) process(ctx context.Context, m Message) {
 		d.log.Warn("outbox: kirim gagal, dijadwalkan retry", "id", m.ID, "attempt", attempts, "next_retry_at", next, "err", err)
 		return
 	}
+	d.recordOutbox("delivered")
 	if err := d.store.MarkDelivered(ctx, m.ID); err != nil {
 		d.log.Error("outbox: mark delivered gagal", "id", m.ID, "err", err)
 	}

@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 	"github.com/Pravasta/payment-service/internal/infrastructure/crypto"
 	"github.com/Pravasta/payment-service/internal/infrastructure/database"
 	"github.com/Pravasta/payment-service/internal/infrastructure/logger"
+	"github.com/Pravasta/payment-service/internal/infrastructure/metrics"
 	"github.com/Pravasta/payment-service/internal/outbox"
 	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
 )
@@ -46,8 +49,10 @@ func main() {
 		}
 	}
 
+	metric := metrics.New()
+
 	outboxRepo := repository.NewOutboxRepository(db)
-	dispatcher := outbox.NewDispatcher(outboxRepo, masterKey, log, outbox.DefaultConfig())
+	dispatcher := outbox.NewDispatcher(outboxRepo, masterKey, log, outbox.DefaultConfig(), outbox.WithMetrics(metric))
 
 	paymentRepo := repository.NewPaymentRepository(db)
 	refundRepo := repository.NewRefundRepository(db)
@@ -55,7 +60,7 @@ func main() {
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
 		SecretKey: cfg.DOKU.SecretKey,
-	})
+	}, doku.WithObserver(metric))
 	paymentSvc := usecase.NewService(paymentRepo, refundRepo, dokuGW)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,6 +68,21 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Worker tidak punya HTTP server sendiri; jalankan endpoint /metrics terpisah
+	// agar Prometheus bisa men-scrape metrik outbox/reconciler.
+	metricsSrv := &http.Server{Addr: cfg.Observability.MetricsAddr, Handler: metric.Handler()}
+	go func() {
+		log.Info("worker metrics listening", "addr", cfg.Observability.MetricsAddr)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("metrics server error", "err", err)
+		}
+	}()
+	defer func() {
+		shutdownCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		_ = metricsSrv.Shutdown(shutdownCtx)
+	}()
 
 	log.Info("worker started", "env", cfg.App.Env)
 	// Outbox dispatch sering; reconciler lebih jarang (polling gateway).
@@ -82,10 +102,17 @@ func main() {
 			}
 		case <-reconcileTicker.C:
 			changed, err := paymentSvc.ReconcilePending(ctx, reconcileBatch)
+			metric.ObserveReconcile(changed, err != nil)
 			if err != nil {
 				log.Error("reconcile error", "err", err)
 			} else if changed > 0 {
 				log.Info("reconciler memperbarui transaksi", "changed", changed)
+			}
+			// Perbarui gauge backlog outbox tiap siklus reconcile (cukup jarang).
+			if pending, dead, cerr := outboxRepo.Counts(ctx); cerr != nil {
+				log.Warn("outbox counts gagal", "err", cerr)
+			} else {
+				metric.SetOutboxBacklog(pending, dead)
 			}
 		case <-stop:
 			log.Info("worker shutting down")

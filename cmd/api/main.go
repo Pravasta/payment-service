@@ -18,6 +18,7 @@ import (
 	"github.com/Pravasta/payment-service/internal/infrastructure/crypto"
 	"github.com/Pravasta/payment-service/internal/infrastructure/database"
 	"github.com/Pravasta/payment-service/internal/infrastructure/logger"
+	"github.com/Pravasta/payment-service/internal/infrastructure/metrics"
 	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
 )
 
@@ -53,11 +54,12 @@ func main() {
 	idemRepo := repository.NewIdempotencyRepository(db)
 	outboxRepo := repository.NewOutboxRepository(db)
 	refundRepo := repository.NewRefundRepository(db)
+	metric := metrics.New()
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
 		SecretKey: cfg.DOKU.SecretKey,
-	})
+	}, doku.WithObserver(metric))
 	paymentSvc := usecase.NewService(paymentRepo, refundRepo, dokuGW)
 
 	// Readiness: /readyz sehat hanya bila DB bisa di-ping.
@@ -68,7 +70,7 @@ func main() {
 	}
 	ready := func(ctx context.Context) error { return sqlDB.PingContext(ctx) }
 
-	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey, idemRepo, outboxRepo)
+	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey, idemRepo, outboxRepo, log, metric)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
