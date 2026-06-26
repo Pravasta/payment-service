@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "Payment Service",
+    "_postman_id": "a1f0c0de-0000-4000-8000-paymentsvc01",
+    "description": "Koleksi Postman untuk Payment Service (Go, DOKU gateway).\n\n## Autentikasi\nSemua endpoint `/v1/*` butuh header:\n`Authorization: Bearer <key_id>:<secret>`\n\nKoleksi ini sudah memasang auth di level koleksi memakai variabel `{{keyId}}` & `{{secret}}` (default dari `cmd/seed`). Endpoint Health & Webhook memakai `noauth`.\n\nBila credential mengaktifkan HMAC request-signing (kolom `signing_secret_enc` terisi), isi variabel `{{signingSecret}}` — pre-request script koleksi otomatis menambahkan `X-Timestamp` & `X-Signature`. Default seed TIDAK memakai HMAC, jadi biarkan kosong.\n\n## Setup cepat\n1. `make db-up && make migrate`\n2. `go run ./cmd/seed`  → cetak key_id/secret\n3. `make run`\n4. Import koleksi + environment `payment-service.local`.\n\nLihat `docs/postman/README.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{keyId}}:{{secret}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// HMAC request-signing OPSIONAL: aktif hanya bila variabel signingSecret terisi.",
+          "// Komponen tanda tangan (sesuai middleware auth):",
+          "//   {timestamp}\\n{METHOD}\\n{request_uri}\\n{sha256_hex(body)}",
+          "const signingSecret = pm.variables.get('signingSecret');",
+          "if (signingSecret && signingSecret.length > 0) {",
+          "  const ts = Math.floor(Date.now() / 1000).toString();",
+          "  let body = '';",
+          "  if (pm.request.body && pm.request.body.mode === 'raw' && pm.request.body.raw) {",
+          "    body = pm.variables.replaceIn(pm.request.body.raw);",
+          "  }",
+          "  const bodyDigest = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);",
+          "  const url = pm.request.url;",
+          "  let uri = '/' + (url.path ? url.path.join('/') : '');",
+          "  const active = (url.query ? url.query.all() : []).filter(function (q) { return !q.disabled; });",
+          "  if (active.length) {",
+          "    uri += '?' + active.map(function (q) { return q.key + '=' + q.value; }).join('&');",
+          "  }",
+          "  const component = [ts, pm.request.method, uri, bodyDigest].join('\\n');",
+          "  const sig = CryptoJS.HmacSHA256(component, signingSecret).toString(CryptoJS.enc.Base64);",
+          "  pm.request.headers.upsert({ key: 'X-Timestamp', value: ts });",
+          "  pm.request.headers.upsert({ key: 'X-Signature', value: sig });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "keyId", "value": "pk_demo_001" },
+    { "key": "secret", "value": "sk_demo_secret_change_me" },
+    { "key": "signingSecret", "value": "" },
+    { "key": "externalReference", "value": "demo-0001" },
+    { "key": "paymentId", "value": "" },
+    { "key": "outboxId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness — GET /healthz",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/healthz", "host": ["{{baseUrl}}"], "path": ["healthz"] },
+            "description": "Liveness probe. Selalu 200 bila proses hidup."
+          }
+        },
+        {
+          "name": "Readiness — GET /readyz",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/readyz", "host": ["{{baseUrl}}"], "path": ["readyz"] },
+            "description": "Readiness probe. 200 hanya bila DB bisa di-ping; 503 bila tidak."
+          }
+        },
+        {
+          "name": "Metrics — GET /metrics",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] },
+            "description": "Endpoint scrape Prometheus (tanpa auth; batasi via jaringan). Worker punya endpoint sendiri di METRICS_ADDR (default :9091)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment — POST /v1/payments",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// external_reference UNIK per app — generate baru tiap kirim agar tidak 409.",
+                  "pm.collectionVariables.set('externalReference', 'demo-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "if (j && j.id) {",
+                  "  pm.collectionVariables.set('paymentId', j.id);",
+                  "  console.log('paymentId =', j.id, '| payment_url =', j.payment_url);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}", "description": "WAJIB untuk endpoint tulis. Key sama + payload sama → response yang sama (replay aman)." }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_reference\": \"{{externalReference}}\",\n  \"amount\": 50000,\n  \"currency\": \"IDR\",\n  \"customer_ref\": \"cust-001\",\n  \"description\": \"Demo order\",\n  \"expiry_minutes\": 60,\n  \"return_url\": \"https://example.com/return\",\n  \"metadata\": { \"order_id\": \"demo-123\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/v1/payments", "host": ["{{baseUrl}}"], "path": ["v1", "payments"] },
+            "description": "Membuat transaksi & memanggil DOKU Checkout. `amount` = minor unit (IDR rupiah utuh). Mengembalikan `payment_url` (status `pending`).\n\nButuh scope `payments:write` + header `Idempotency-Key`.\n\nCatatan: tanpa kredensial DOKU yang valid, panggilan ke gateway gagal → transaksi `failed` dan response 5xx/error. Auth & validasi tetap teruji."
+          }
+        },
+        {
+          "name": "Get Payment by ID — GET /v1/payments/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/payments/{{paymentId}}", "host": ["{{baseUrl}}"], "path": ["v1", "payments", "{{paymentId}}"] },
+            "description": "Ambil satu transaksi milik app (ter-scope per app_id). Scope `payments:read`. `{{paymentId}}` otomatis terisi dari Create Payment."
+          }
+        },
+        {
+          "name": "Get Payment by Reference — GET /v1/payments?external_reference",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/payments?external_reference={{externalReference}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "payments"],
+              "query": [{ "key": "external_reference", "value": "{{externalReference}}" }]
+            },
+            "description": "Cari transaksi berdasarkan `external_reference` milik app. Scope `payments:read`."
+          }
+        },
+        {
+          "name": "List Transactions — GET /v1/transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/transactions?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "transactions"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "status", "value": "pending", "disabled": true },
+                { "key": "from", "value": "2026-01-01", "disabled": true },
+                { "key": "to", "value": "2026-12-31", "disabled": true },
+                { "key": "cursor", "value": "", "disabled": true }
+              ]
+            },
+            "description": "List transaksi ter-scope per app dengan keyset pagination. Scope `payments:read`.\n\nFilter opsional: `status`, `from`/`to` (YYYY-MM-DD atau RFC3339), `limit` (default 50, maks 100). Untuk halaman berikutnya, pakai `next_cursor` dari response ke parameter `cursor`."
+          }
+        },
+        {
+          "name": "Sync Payment — POST /v1/payments/{id}/sync",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Idempotency-Key", "value": "{{$guid}}" }],
+            "url": { "raw": "{{baseUrl}}/v1/payments/{{paymentId}}/sync", "host": ["{{baseUrl}}"], "path": ["v1", "payments", "{{paymentId}}", "sync"] },
+            "description": "Paksa refresh status dari gateway (GetStatus). Rate-limited per transaksi (min 10 detik antar-sync → 429 bila terlalu cepat). Scope `payments:write`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refunds",
+      "item": [
+        {
+          "name": "Create Refund (full) — POST /v1/payments/{id}/refunds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 0,\n  \"reason\": \"customer request\"\n}" },
+            "url": { "raw": "{{baseUrl}}/v1/payments/{{paymentId}}/refunds", "host": ["{{baseUrl}}"], "path": ["v1", "payments", "{{paymentId}}", "refunds"] },
+            "description": "Refund penuh: `amount = 0` → seluruh sisa refundable. Hanya transaksi `paid`/`settled`/`partially_refunded`.\n\nSync (kartu/QRIS/e-wallet) → `succeeded`/`failed` langsung. VA → 422 (refund manual). Scope `payments:write` + `Idempotency-Key`."
+          }
+        },
+        {
+          "name": "Create Refund (partial) — POST /v1/payments/{id}/refunds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 20000,\n  \"reason\": \"partial refund\"\n}" },
+            "url": { "raw": "{{baseUrl}}/v1/payments/{{paymentId}}/refunds", "host": ["{{baseUrl}}"], "path": ["v1", "payments", "{{paymentId}}", "refunds"] },
+            "description": "Refund sebagian: `amount` ≤ sisa refundable (minor unit). Melebihi → 422 `unprocessable`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Replay Outbox Dead-letter — POST /v1/admin/outbox/{id}/replay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/admin/outbox/{{outboxId}}/replay", "host": ["{{baseUrl}}"], "path": ["v1", "admin", "outbox", "{{outboxId}}", "replay"] },
+            "description": "Kembalikan pesan callback `dead` ke antrean `pending` agar dikirim ulang. Scope `outbox:admin`. Isi `{{outboxId}}` dengan id notification_outbox berstatus dead. 404 bila id tidak ada / bukan dead-letter."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "DOKU Notification — POST /v1/webhooks/doku",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Client-Id", "value": "{{dokuClientId}}", "description": "Header DOKU" },
+              { "key": "Request-Id", "value": "{{$guid}}", "description": "Id notifikasi DOKU (dedup gateway_event_id)" },
+              { "key": "Request-Timestamp", "value": "2026-06-27T00:00:00Z" },
+              { "key": "Signature", "value": "HMACSHA256=...", "description": "Tanda tangan DOKU; diverifikasi server. Tanpa signature valid → 401." }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order\": { \"invoice_number\": \"demo-0001\", \"amount\": \"50000.00\" },\n  \"transaction\": { \"status\": \"SUCCESS\", \"original_request_id\": \"<gateway_request_id>\", \"date\": \"2026-06-27T00:00:00Z\" },\n  \"channel\": { \"id\": \"VIRTUAL_ACCOUNT_BCA\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/v1/webhooks/doku", "host": ["{{baseUrl}}"], "path": ["v1", "webhooks", "doku"] },
+            "description": "Receiver notifikasi DOKU (dipanggil GATEWAY, bukan app). Tanpa auth API key — diverifikasi via HMAC signature DOKU di server.\n\nRequest ini hanya untuk DOKUMENTASI bentuk payload/header. Mengirim dari Postman akan 401 kecuali Signature dihitung dengan SecretKey DOKU yang benar. Match transaksi via `transaction.original_request_id` (= gateway_request_id kita)."
+          }
+        }
+      ]
+    }
+  ]
+}
