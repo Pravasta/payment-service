@@ -1,0 +1,483 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: "1.0.0"
+  description: >
+    Payment Service terpusat (DOKU sebagai gateway pertama). Uang selalu dalam
+    **minor unit** (integer); untuk IDR `currency_exponent = 0` (rupiah utuh).
+
+
+    ## Autentikasi
+
+    Semua endpoint `/v1/*` memakai API key:
+
+    `Authorization: Bearer <key_id>:<secret>`
+
+
+    Bila credential mengaktifkan HMAC request-signing, sertakan juga header
+    `X-Timestamp` (Unix detik) dan `X-Signature`
+    (`base64(HMAC-SHA256(signingKey, "{ts}\n{METHOD}\n{request_uri}\n{sha256_hex(body)}"))`).
+
+
+    ## Idempotency
+
+    Endpoint tulis (`POST /v1/payments`, `POST /v1/payments/{id}/refunds`) WAJIB
+    header `Idempotency-Key`. Key sama + payload sama → response identik; key sama
+    dengan payload berbeda → `409 conflict`.
+
+
+    ## Correlation id
+
+    Setiap response menyertakan `X-Request-Id`; kirimkan header yang sama untuk
+    menelusuri satu request end-to-end di log.
+
+servers:
+  - url: http://localhost:8080
+    description: Lokal (development)
+
+tags:
+  - name: Health
+    description: Liveness, readiness, metrik
+  - name: Payments
+    description: Pembuatan & pembacaan pembayaran
+  - name: Refunds
+    description: Pengembalian dana
+  - name: Admin
+    description: Operasional (dead-letter outbox)
+  - name: Webhooks
+    description: Notifikasi masuk dari gateway
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Proses hidup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe (ping DB)
+      security: []
+      responses:
+        "200":
+          description: Siap melayani
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+        "503":
+          description: Dependency (DB) belum siap
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Metrik Prometheus
+      security: []
+      responses:
+        "200":
+          description: Eksposisi metrik (format Prometheus text)
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /v1/payments:
+    post:
+      tags: [Payments]
+      summary: Buat pembayaran (checkout)
+      description: >
+        Membuat transaksi & memanggil DOKU Checkout. Mengembalikan `payment_url`
+        (status `pending`). Butuh scope `payments:write`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+      responses:
+        "201":
+          description: Transaksi dibuat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Idempotency conflict / external_reference duplikat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500": { $ref: "#/components/responses/Internal" }
+    get:
+      tags: [Payments]
+      summary: Cari pembayaran berdasarkan external_reference
+      description: Butuh scope `payments:read`.
+      parameters:
+        - name: external_reference
+          in: query
+          required: true
+          schema: { type: string }
+          description: Referensi unik milik app
+      responses:
+        "200":
+          description: Transaksi ditemukan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/payments/{id}:
+    get:
+      tags: [Payments]
+      summary: Ambil pembayaran berdasarkan id
+      description: Ter-scope per app. Butuh scope `payments:read`.
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+      responses:
+        "200":
+          description: Transaksi ditemukan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/transactions:
+    get:
+      tags: [Payments]
+      summary: List transaksi (keyset pagination)
+      description: Ter-scope per app, urut `created_at DESC`. Butuh scope `payments:read`.
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PaymentStatus" }
+        - name: from
+          in: query
+          schema: { type: string, example: "2026-01-01" }
+          description: "created_at >= (YYYY-MM-DD atau RFC3339)"
+        - name: to
+          in: query
+          schema: { type: string, example: "2026-12-31" }
+          description: "created_at <= (YYYY-MM-DD atau RFC3339)"
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 100 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Cursor opaque dari `next_cursor` halaman sebelumnya
+      responses:
+        "200":
+          description: Daftar transaksi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListPaymentsResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/payments/{id}/sync:
+    post:
+      tags: [Payments]
+      summary: Sinkronkan status dari gateway
+      description: >
+        Paksa refresh status via GetStatus DOKU. Rate-limited per transaksi
+        (min 10 detik). Butuh scope `payments:write`.
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+      responses:
+        "200":
+          description: Transaksi (status terbaru)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429":
+          description: Terlalu sering sync
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/payments/{id}/refunds:
+    post:
+      tags: [Refunds]
+      summary: Buat refund
+      description: >
+        Refund penuh (`amount: 0`) atau sebagian (`amount` ≤ sisa refundable).
+        Hanya transaksi `paid`/`settled`/`partially_refunded`. Channel kartu/QRIS/
+        e-wallet sync; VA → `422`. Butuh scope `payments:write`.
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRefundRequest" }
+      responses:
+        "201":
+          description: Refund dibuat (succeeded/pending tergantung channel)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RefundResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Refund melebihi sisa / channel tak mendukung refund
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/admin/outbox/{id}/replay:
+    post:
+      tags: [Admin]
+      summary: Replay pesan outbox dead-letter
+      description: Kembalikan callback `dead` ke antrean `pending`. Butuh scope `outbox:admin`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Dijadwalkan ulang
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: requeued }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/webhooks/doku:
+    post:
+      tags: [Webhooks]
+      summary: Notifikasi DOKU (dipanggil gateway)
+      description: >
+        Receiver notifikasi DOKU — TIDAK memakai auth API key; diverifikasi via
+        HMAC signature DOKU di server. Match transaksi via
+        `transaction.original_request_id`.
+      security: []
+      parameters:
+        - { name: Client-Id, in: header, schema: { type: string } }
+        - { name: Request-Id, in: header, schema: { type: string } }
+        - { name: Request-Timestamp, in: header, schema: { type: string } }
+        - { name: Signature, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload notifikasi DOKU (subset yang dipakai)
+              example:
+                order: { invoice_number: "demo-0001", amount: "50000.00" }
+                transaction:
+                  status: "SUCCESS"
+                  original_request_id: "<gateway_request_id>"
+                  date: "2026-06-27T00:00:00Z"
+                channel: { id: "VIRTUAL_ACCOUNT_BCA" }
+      responses:
+        "200":
+          description: Diterima
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+        "401":
+          description: Signature tidak valid
+        "500":
+          description: Gagal diproses (DOKU akan retry)
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: "Token berformat `<key_id>:<secret>` (mis. `pk_demo_001:sk_demo_secret_change_me`)."
+
+  parameters:
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: Id transaksi
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: Kunci idempotency unik (mis. UUID v4)
+
+  responses:
+    BadRequest:
+      description: Request tidak valid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Autentikasi gagal
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Scope kurang
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Tidak ditemukan
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Internal:
+      description: Kesalahan internal
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    PaymentStatus:
+      type: string
+      description: State machine canonical pembayaran
+      enum:
+        - created
+        - pending
+        - paid
+        - settled
+        - expired
+        - failed
+        - partially_refunded
+        - refunded
+
+    RefundStatus:
+      type: string
+      enum: [requested, pending, succeeded, failed]
+
+    CreatePaymentRequest:
+      type: object
+      required: [external_reference, amount]
+      properties:
+        external_reference:
+          type: string
+          maxLength: 64
+          description: Id unik milik app (mis. invoice id)
+          example: demo-0001
+        amount:
+          type: integer
+          format: int64
+          description: Nominal dalam minor unit (IDR = rupiah utuh)
+          example: 50000
+        currency: { type: string, default: IDR, example: IDR }
+        customer_ref: { type: string, example: cust-001 }
+        description: { type: string, example: Demo order }
+        expiry_minutes: { type: integer, example: 60 }
+        return_url: { type: string, example: "https://example.com/return" }
+        metadata:
+          type: object
+          additionalProperties: true
+          example: { order_id: "demo-123" }
+
+    PaymentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/PaymentStatus" }
+        external_reference: { type: string }
+        amount: { type: integer, format: int64 }
+        currency: { type: string }
+        refunded_amount: { type: integer, format: int64 }
+        payment_url: { type: string }
+        payment_method: { type: string }
+        description: { type: string }
+        customer_ref: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+      example:
+        id: 9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8
+        status: pending
+        external_reference: demo-0001
+        amount: 50000
+        currency: IDR
+        refunded_amount: 0
+        payment_url: "https://staging.doku.com/checkout-link-v2/abc123"
+        created_at: "2026-06-27T02:00:00Z"
+        expires_at: "2026-06-27T03:00:00Z"
+
+    ListPaymentsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentResponse" }
+        has_more: { type: boolean }
+        next_cursor: { type: string }
+
+    CreateRefundRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: "0 atau diabaikan → refund penuh; selain itu ≤ sisa refundable"
+          example: 20000
+        reason: { type: string, example: customer request }
+
+    RefundResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transaction_id: { type: string, format: uuid }
+        amount: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { $ref: "#/components/schemas/RefundStatus" }
+        reason: { type: string }
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Kode mesin stabil
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - not_found
+            - conflict
+            - unprocessable
+            - rate_limited
+            - internal_error
+        message: { type: string }
+        request_id: { type: string }
+      example:
+        code: not_found
+        message: data tidak ditemukan
+        request_id: 93a1de9d-d4d5-48b7-8e23-08fdd9ad7a31
+
+security:
+  - apiKey: []

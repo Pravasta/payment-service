@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Service API — Swagger</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%92%B3%3C/text%3E%3C/svg%3E"
+    />
+    <!-- Swagger UI (di-pin ke versi 5 dari CDN) -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css"
+    />
+    <style>
+      body {
+        margin: 0;
+        background: #fafafa;
+      }
+      /* Topbar bawaan disembunyikan; pakai header sendiri. */
+      .swagger-ui .topbar {
+        display: none;
+      }
+      .ps-header {
+        background: #1b1f3b;
+        color: #fff;
+        padding: 14px 20px;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      .ps-header strong {
+        font-size: 16px;
+      }
+      .ps-header span {
+        opacity: 0.7;
+        font-size: 13px;
+        margin-left: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ps-header">
+      <strong>Payment Service API</strong>
+      <span>dokumentasi interaktif (OpenAPI 3.0)</span>
+    </div>
+    <div id="swagger-ui"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+    <script>
+      window.addEventListener("load", function () {
+        window.ui = SwaggerUIBundle({
+          // Relatif terhadap index.html → ikut domain GitHub Pages (tanpa CORS).
+          url: "./openapi.yaml",
+          dom_id: "#swagger-ui",
+          deepLinking: true,
+          presets: [
+            SwaggerUIBundle.presets.apis,
+            SwaggerUIStandalonePreset,
+          ],
+          layout: "StandaloneLayout",
+          tryItOutEnabled: true,
+          persistAuthorization: true,
+        });
+      });
+    </script>
+  </body>
+</html>
