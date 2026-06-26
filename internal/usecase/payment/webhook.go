@@ -132,12 +132,47 @@ func (s *Service) applyWebhookTransition(ctx context.Context, txn *domain.Transa
 		return s.repo.ApplyWebhook(ctx, txn, event, nil)
 	}
 
-	applyStatusFields(txn, evt)
+	applyStatusFields(txn, evt.Status, evt.PaymentMethod, evt.OccurredAt)
 	txn.Status = evt.Status
 	txn.UpdatedAt = time.Now().UTC()
 	event.ToStatus = evt.Status
 
-	outbox := &domain.OutboxMessage{
+	return s.repo.ApplyWebhook(ctx, txn, event, newOutbox(txn, event))
+}
+
+// applyDetectedStatus menerapkan status yang TERDETEKSI dari polling (sync /
+// reconciler). Berbeda dengan webhook: hanya bertindak bila ada transisi legal
+// (tanpa mencatat event no-op), dan tidak melakukan dedup gateway_event_id.
+// Mengembalikan changed=true bila status berubah.
+func (s *Service) applyDetectedStatus(ctx context.Context, txn *domain.Transaction, newStatus domain.Status, paymentMethod string, amountMinor int64, source string, raw map[string]any) (bool, error) {
+	if newStatus == "" || newStatus == txn.Status || !domain.CanTransition(txn.Status, newStatus) {
+		return false, nil
+	}
+	from := txn.Status
+	now := time.Now().UTC()
+	applyStatusFields(txn, newStatus, paymentMethod, now)
+	txn.Status = newStatus
+	txn.UpdatedAt = now
+
+	event := &domain.TransactionEvent{
+		ID:            uuid.New(),
+		TransactionID: txn.ID,
+		AppID:         txn.AppID,
+		EventType:     eventTypeForStatus(newStatus),
+		FromStatus:    from,
+		ToStatus:      newStatus,
+		AmountMinor:   amountMinor,
+		Source:        source,
+		Payload:       raw,
+		OccurredAt:    now,
+		CreatedAt:     now,
+	}
+	return true, s.repo.ApplyWebhook(ctx, txn, event, newOutbox(txn, event))
+}
+
+// newOutbox membangun pesan outbox callback dari transaksi & event.
+func newOutbox(txn *domain.Transaction, event *domain.TransactionEvent) *domain.OutboxMessage {
+	return &domain.OutboxMessage{
 		ID:            uuid.New(),
 		AppID:         txn.AppID,
 		TransactionID: txn.ID,
@@ -145,20 +180,19 @@ func (s *Service) applyWebhookTransition(ctx context.Context, txn *domain.Transa
 		EventType:     string(event.EventType),
 		Payload:       buildCallbackPayload(txn),
 	}
-	return s.repo.ApplyWebhook(ctx, txn, event, outbox)
 }
 
 // applyStatusFields mengisi timestamp/field turunan sesuai status baru.
-func applyStatusFields(txn *domain.Transaction, evt domain.WebhookEvent) {
-	now := evt.OccurredAt
+func applyStatusFields(txn *domain.Transaction, newStatus domain.Status, paymentMethod string, occurredAt time.Time) {
+	now := occurredAt
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	switch evt.Status {
+	switch newStatus {
 	case domain.StatusPaid:
 		txn.PaidAt = &now
-		if evt.PaymentMethod != "" {
-			txn.PaymentMethod = evt.PaymentMethod
+		if paymentMethod != "" {
+			txn.PaymentMethod = paymentMethod
 		}
 	case domain.StatusFailed:
 		txn.FailedAt = &now

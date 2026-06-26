@@ -206,9 +206,26 @@ func parseIntParam(s string) (int, error) {
 	return strconv.Atoi(s)
 }
 
-// Sync — POST /v1/payments/{id}/sync (§4.3). TODO(impl).
+// Sync — POST /v1/payments/{id}/sync (§4.3): paksa refresh status dari gateway,
+// rate-limited per transaksi.
 func (h *PaymentHandler) Sync(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w, "sync payment")
+	appID := appmw.AppIDFromContext(r.Context())
+	if appID == uuid.Nil {
+		writeError(w, r, apperror.Internal())
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, apperror.BadRequest("id pembayaran tidak valid"))
+		return
+	}
+
+	txn, err := h.svc.SyncPayment(r.Context(), appID, id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.NewPaymentResponse(txn))
 }
 
 // Refund — POST /v1/payments/{id}/refunds (§4.4). TODO(impl).

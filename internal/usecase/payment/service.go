@@ -26,15 +26,24 @@ func currencyExponent(currency string) (int, bool) {
 	}
 }
 
+// syncMinInterval membatasi frekuensi /sync per transaksi (detailed-design §4.3).
+const syncMinInterval = 10 * time.Second
+
 // Service meng-orchestrate use-case pembayaran (CreatePayment, GetPayment, Sync, Refund).
 type Service struct {
-	repo    domain.Repository
-	refunds domain.RefundRepository
-	gateway domain.Gateway
+	repo        domain.Repository
+	refunds     domain.RefundRepository
+	gateway     domain.Gateway
+	syncLimiter *rateLimiter
 }
 
 func NewService(repo domain.Repository, refunds domain.RefundRepository, gw domain.Gateway) *Service {
-	return &Service{repo: repo, refunds: refunds, gateway: gw}
+	return &Service{
+		repo:        repo,
+		refunds:     refunds,
+		gateway:     gw,
+		syncLimiter: newRateLimiter(syncMinInterval),
+	}
 }
 
 // CreatePaymentInput adalah input use-case create payment (DTO usecase, bukan HTTP).
@@ -251,11 +260,6 @@ func (s *Service) ListPayments(ctx context.Context, in ListPaymentsInput) (ListP
 		res.NextCursorID = &last.ID
 	}
 	return res, nil
-}
-
-// SyncPayment memaksa refresh status dari gateway (rate-limited). TODO(impl).
-func (s *Service) SyncPayment(ctx context.Context, appID, id uuid.UUID) (*domain.Transaction, error) {
-	return nil, errors.New("SyncPayment: belum diimplementasikan")
 }
 
 // RefundInput adalah input use-case refund.

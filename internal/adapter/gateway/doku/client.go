@@ -19,19 +19,20 @@ type signedResponse struct {
 	requestID  string // Request-Id yang KITA kirim (dipakai sbg GatewayRequestID)
 }
 
-// postSigned membangun request POST bertanda tangan ke Direct API DOKU dan
+// doSigned membangun request bertanda tangan ke Direct API DOKU dan
 // mengeksekusinya. Skema signature: HMAC-SHA256 berbasis component string
 // (doku-integration-spec §1) — sama dengan verifier webhook.
 //
 // target adalah Request-Target (path, mis. "/checkout/v1/payment") yang ikut
-// ditandatangani; harus persis sama dengan path pada URL.
-func (a *Adapter) postSigned(ctx context.Context, target string, body []byte) (signedResponse, error) {
+// ditandatangani; harus persis sama dengan path pada URL. body boleh nil (GET);
+// Digest dihitung atas body kosong.
+func (a *Adapter) doSigned(ctx context.Context, method, target string, body []byte) (signedResponse, error) {
 	ts := a.now().UTC().Format(dokuTimeFormat)
 	reqID := a.newRequestID()
 	digest := Digest(body)
 	signature := Sign(a.cfg.SecretKey, ComponentString(a.cfg.ClientID, reqID, ts, target, digest))
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.BaseURL+target, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, method, a.cfg.BaseURL+target, bytes.NewReader(body))
 	if err != nil {
 		return signedResponse{}, fmt.Errorf("doku: build request: %w", err)
 	}

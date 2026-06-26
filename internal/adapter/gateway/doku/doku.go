@@ -134,7 +134,7 @@ func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (d
 		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: marshal body: %w", err)
 	}
 
-	resp, err := a.postSigned(ctx, checkoutPath, body)
+	resp, err := a.doSigned(ctx, http.MethodPost, checkoutPath, body)
 	if err != nil {
 		return domain.ChargeResult{}, err
 	}
@@ -280,10 +280,54 @@ func parseNotifTime(date, headerTS string) time.Time {
 	return time.Now().UTC()
 }
 
-// GetStatus memanggil Check Status DOKU: GET /orders/v1/status/{invoice|request-id} (spec §5).
-// TODO(impl): ingat saran DOKU cek >=60s setelah pembayaran.
+// statusResponse adalah subset response Check Status DOKU.
+type statusResponse struct {
+	Order struct {
+		Amount string `json:"amount"`
+	} `json:"order"`
+	Transaction struct {
+		Status string `json:"status"`
+	} `json:"transaction"`
+	Channel struct {
+		ID string `json:"id"`
+	} `json:"channel"`
+}
+
+// GetStatus memanggil Check Status DOKU: GET /orders/v1/status/{invoice_number}
+// (doku-integration-spec §5). Catatan: DOKU menyarankan cek >=60 detik setelah
+// pembayaran (status mungkin belum final lebih awal) — di-handle oleh caller.
 func (a *Adapter) GetStatus(ctx context.Context, ref domain.StatusRef) (domain.StatusResult, error) {
-	return domain.StatusResult{}, errors.New("doku.GetStatus: belum diimplementasikan")
+	id := ref.ExternalReference
+	if id == "" {
+		id = ref.GatewayRequestID
+	}
+	if id == "" {
+		return domain.StatusResult{}, fmt.Errorf("doku.GetStatus: butuh external_reference atau gateway_request_id")
+	}
+
+	target := "/orders/v1/status/" + id
+	resp, err := a.doSigned(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return domain.StatusResult{}, err
+	}
+	if resp.statusCode < 200 || resp.statusCode >= 300 {
+		return domain.StatusResult{}, parseError(resp.statusCode, resp.body)
+	}
+
+	var parsed statusResponse
+	if err := json.Unmarshal(resp.body, &parsed); err != nil {
+		return domain.StatusResult{}, fmt.Errorf("doku.GetStatus: parse response: %w", err)
+	}
+
+	var rawMap map[string]any
+	_ = json.Unmarshal(resp.body, &rawMap)
+
+	return domain.StatusResult{
+		Status:        mapStatus(parsed.Transaction.Status),
+		PaymentMethod: parsed.Channel.ID,
+		AmountMinor:   parseAmountMinor(parsed.Order.Amount),
+		Raw:           rawMap,
+	}, nil
 }
 
 // Refund memilih endpoint sesuai channel (spec §9.1) & jenis (VOID/PARTIAL/FULL).

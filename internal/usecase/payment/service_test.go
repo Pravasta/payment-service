@@ -83,6 +83,19 @@ func (m *mockRepo) GetByGatewayTxnID(_ context.Context, _, _ string) (*domain.Tr
 	return nil, domain.ErrNotFound
 }
 
+func (m *mockRepo) ListPendingForReconcile(_ context.Context, olderThan time.Time, limit int) ([]*domain.Transaction, error) {
+	var out []*domain.Transaction
+	for _, t := range m.byID {
+		if t.Status == domain.StatusPending && !t.CreatedAt.After(olderThan) {
+			out = append(out, t)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // listRows dapat di-set test untuk mengontrol hasil ListTransactions.
 func (m *mockRepo) ListTransactions(_ context.Context, f domain.ListFilter) ([]*domain.Transaction, error) {
 	var out []*domain.Transaction
@@ -185,6 +198,9 @@ type mockGateway struct {
 	chargeErr    error
 	webhookEvent domain.WebhookEvent
 	webhookErr   error
+	statusResult domain.StatusResult
+	statusErr    error
+	statusCalls  int
 }
 
 func (g *mockGateway) CreateCharge(_ context.Context, _ domain.ChargeRequest) (domain.ChargeResult, error) {
@@ -199,7 +215,8 @@ func (g *mockGateway) ParseWebhook(_ context.Context, _ domain.WebhookPayload) (
 	return g.webhookEvent, g.webhookErr
 }
 func (g *mockGateway) GetStatus(_ context.Context, _ domain.StatusRef) (domain.StatusResult, error) {
-	return domain.StatusResult{}, errors.New("not impl")
+	g.statusCalls++
+	return g.statusResult, g.statusErr
 }
 func (g *mockGateway) Refund(_ context.Context, _ domain.RefundRequest) (domain.RefundResult, error) {
 	return domain.RefundResult{}, errors.New("not impl")

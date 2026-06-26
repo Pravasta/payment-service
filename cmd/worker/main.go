@@ -10,13 +10,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Pravasta/payment-service/internal/adapter/gateway/doku"
 	"github.com/Pravasta/payment-service/internal/adapter/repository"
 	"github.com/Pravasta/payment-service/internal/infrastructure/config"
 	"github.com/Pravasta/payment-service/internal/infrastructure/crypto"
 	"github.com/Pravasta/payment-service/internal/infrastructure/database"
 	"github.com/Pravasta/payment-service/internal/infrastructure/logger"
 	"github.com/Pravasta/payment-service/internal/outbox"
+	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
 )
+
+// reconcileBatch membatasi jumlah transaksi pending per siklus reconciler.
+const reconcileBatch = 100
 
 func main() {
 	cfg, err := config.Load()
@@ -44,6 +49,14 @@ func main() {
 	outboxRepo := repository.NewOutboxRepository(db)
 	dispatcher := outbox.NewDispatcher(outboxRepo, masterKey, log, outbox.DefaultConfig())
 
+	paymentRepo := repository.NewPaymentRepository(db)
+	dokuGW := doku.New(doku.Config{
+		BaseURL:   cfg.DOKU.BaseURL,
+		ClientID:  cfg.DOKU.ClientID,
+		SecretKey: cfg.DOKU.SecretKey,
+	})
+	paymentSvc := usecase.NewService(paymentRepo, nil, dokuGW)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -51,19 +64,28 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 	log.Info("worker started", "env", cfg.App.Env)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	// Outbox dispatch sering; reconciler lebih jarang (polling gateway).
+	outboxTicker := time.NewTicker(5 * time.Second)
+	defer outboxTicker.Stop()
+	reconcileTicker := time.NewTicker(60 * time.Second)
+	defer reconcileTicker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-outboxTicker.C:
 			n, err := dispatcher.RunOnce(ctx)
 			if err != nil {
 				log.Error("outbox dispatch error", "err", err)
 			} else if n > 0 {
 				log.Debug("outbox batch diproses", "count", n)
 			}
-			// TODO: reconciler (detailed-design §6.3) — issue 0010.
+		case <-reconcileTicker.C:
+			changed, err := paymentSvc.ReconcilePending(ctx, reconcileBatch)
+			if err != nil {
+				log.Error("reconcile error", "err", err)
+			} else if changed > 0 {
+				log.Info("reconciler memperbarui transaksi", "changed", changed)
+			}
 		case <-stop:
 			log.Info("worker shutting down")
 			return

@@ -60,6 +60,10 @@ type Repository interface {
 	// untuk mendeteksi adanya halaman berikutnya).
 	ListTransactions(ctx context.Context, f ListFilter) ([]*Transaction, error)
 
+	// ListPendingForReconcile mengambil transaksi status=pending dengan
+	// created_at <= olderThan (kandidat reconciler, detailed-design §6.3).
+	ListPendingForReconcile(ctx context.Context, olderThan time.Time, limit int) ([]*Transaction, error)
+
 	// AppendEvent menulis transaction_event (append-only). Idealnya dipanggil
 	// dalam transaksi DB yang sama dengan Update (lihat detailed-design §6.1).
 	AppendEvent(ctx context.Context, e *TransactionEvent) error

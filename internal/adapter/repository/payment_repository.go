@@ -89,6 +89,26 @@ func (r *PaymentRepository) ListTransactions(ctx context.Context, f domain.ListF
 	return out, nil
 }
 
+func (r *PaymentRepository) ListPendingForReconcile(ctx context.Context, olderThan time.Time, limit int) ([]*domain.Transaction, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var ms []model.Transaction
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND created_at <= ?", string(domain.StatusPending), olderThan).
+		Order("created_at asc").
+		Limit(limit).
+		Find(&ms).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Transaction, len(ms))
+	for i := range ms {
+		out[i] = toDomain(&ms[i])
+	}
+	return out, nil
+}
+
 func (r *PaymentRepository) AppendEvent(ctx context.Context, e *domain.TransactionEvent) error {
 	m := eventToModel(e)
 	if m.ID == uuid.Nil {
