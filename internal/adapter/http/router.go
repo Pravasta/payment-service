@@ -11,6 +11,7 @@ import (
 
 	"github.com/Pravasta/payment-service/internal/adapter/http/handler"
 	appmw "github.com/Pravasta/payment-service/internal/adapter/http/middleware"
+	"github.com/Pravasta/payment-service/internal/outbox"
 	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
 )
 
@@ -20,12 +21,14 @@ import (
 //   - credRepo: dipakai oleh auth middleware untuk lookup API key.
 //   - masterKey: kunci AES-GCM untuk dekripsi HMAC signing secret (boleh nil di dev).
 //   - idemStore: penyimpanan idempotency untuk endpoint tulis (create/refund).
+//   - outboxStore: untuk endpoint admin replay dead-letter.
 func NewRouter(
 	paymentSvc *usecase.Service,
 	ready func(ctx context.Context) error,
 	credRepo appmw.AuthRepository,
 	masterKey []byte,
 	idemStore appmw.IdempotencyStore,
+	outboxStore outbox.Store,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -52,6 +55,10 @@ func NewRouter(
 		r.With(appmw.RequireScope("payments:read")).Get("/transactions", payments.List)
 		r.With(appmw.RequireScope("payments:write")).Post("/payments/{id}/sync", payments.Sync)
 		r.With(appmw.RequireScope("payments:write"), idempotent).Post("/payments/{id}/refunds", payments.Refund)
+
+		// Operasional: replay dead-letter outbox (butuh scope outbox:admin).
+		admin := handler.NewAdminHandler(outboxStore)
+		r.With(appmw.RequireScope("outbox:admin")).Post("/admin/outbox/{id}/replay", admin.ReplayOutbox)
 
 		// Webhook DOKU: terima dari gateway — tidak perlu auth API key,
 		// diverifikasi via HMAC signature DOKU di dalam handler.
