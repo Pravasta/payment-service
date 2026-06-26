@@ -12,7 +12,12 @@ import (
 
 // New membuka koneksi GORM ke PostgreSQL dan mengatur connection pool.
 func New(cfg config.DatabaseConfig) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
+		// TranslateError memetakan error driver ke error GORM portabel
+		// (mis. gorm.ErrDuplicatedKey untuk pelanggaran UNIQUE) — dipakai
+		// idempotency repository untuk mendeteksi key duplikat.
+		TranslateError: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("database: open: %w", err)
 	}

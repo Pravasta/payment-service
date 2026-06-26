@@ -50,6 +50,7 @@ func main() {
 	// Wiring Clean Architecture: adapter -> usecase -> delivery.
 	paymentRepo := repository.NewPaymentRepository(db)
 	credRepo := repository.NewCredentialRepository(db)
+	idemRepo := repository.NewIdempotencyRepository(db)
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
@@ -66,7 +67,7 @@ func main() {
 	}
 	ready := func(ctx context.Context) error { return sqlDB.PingContext(ctx) }
 
-	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey)
+	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey, idemRepo)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
