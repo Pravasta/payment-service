@@ -95,11 +95,12 @@ const (
 // RefundRequest adalah input canonical refund.
 type RefundRequest struct {
 	ExternalReference string
-	OriginalRequestID string // DOKU payment.original_request_id
+	OriginalRequestID string // DOKU payment.original_request_id (= gateway_request_id)
 	AmountMinor       int64
 	Currency          string
 	Reason            string
 	Type              RefundType
+	PaymentMethod     string // channel.id — menentukan endpoint refund per channel (spec §9.1)
 }
 
 // RefundResult adalah hasil canonical refund.

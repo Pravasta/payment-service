@@ -70,6 +70,8 @@ func FromDomain(err error) *AppError {
 		return BadRequest("jumlah refund melebihi saldo yang tersedia")
 	case errors.Is(err, domain.ErrNotRefundable):
 		return BadRequest("transaksi tidak dalam status yang bisa direfund")
+	case errors.Is(err, domain.ErrRefundNotSupported):
+		return UnprocessableEntity("refund tidak didukung untuk channel pembayaran ini")
 	case errors.Is(err, domain.ErrUnsupportedCurrency):
 		return BadRequest("mata uang tidak didukung")
 	case errors.Is(err, domain.ErrInvalidAmount):

@@ -50,12 +50,13 @@ func main() {
 	dispatcher := outbox.NewDispatcher(outboxRepo, masterKey, log, outbox.DefaultConfig())
 
 	paymentRepo := repository.NewPaymentRepository(db)
+	refundRepo := repository.NewRefundRepository(db)
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
 		SecretKey: cfg.DOKU.SecretKey,
 	})
-	paymentSvc := usecase.NewService(paymentRepo, nil, dokuGW)
+	paymentSvc := usecase.NewService(paymentRepo, refundRepo, dokuGW)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

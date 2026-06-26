@@ -228,9 +228,37 @@ func (h *PaymentHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.NewPaymentResponse(txn))
 }
 
-// Refund — POST /v1/payments/{id}/refunds (§4.4). TODO(impl).
+// Refund — POST /v1/payments/{id}/refunds (§4.4).
 func (h *PaymentHandler) Refund(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w, "refund")
+	appID := appmw.AppIDFromContext(r.Context())
+	if appID == uuid.Nil {
+		writeError(w, r, apperror.Internal())
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, apperror.BadRequest("id pembayaran tidak valid"))
+		return
+	}
+
+	var req dto.CreateRefundRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	refund, err := h.svc.Refund(r.Context(), usecase.RefundInput{
+		AppID:          appID,
+		TransactionID:  id,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		AmountMinor:    req.Amount,
+		Reason:         req.Reason,
+	})
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, dto.NewRefundResponse(refund))
 }
 
 // WebhookDOKU — POST /v1/webhooks/doku (§4.6). Diverifikasi via signature DOKU
@@ -259,11 +287,4 @@ func (h *PaymentHandler) WebhookDOKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func notImplemented(w http.ResponseWriter, what string) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"error":   "not_implemented",
-		"message": what + " belum diimplementasikan",
-	})
 }

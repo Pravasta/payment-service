@@ -78,6 +78,34 @@ func DecodeCursor(s string) (time.Time, uuid.UUID, error) {
 	return time.Unix(0, ns).UTC(), id, nil
 }
 
+// CreateRefundRequest adalah body POST /v1/payments/{id}/refunds (§4.4).
+type CreateRefundRequest struct {
+	Amount int64  `json:"amount"` // 0 / diabaikan → full refund
+	Reason string `json:"reason"`
+}
+
+// RefundResponse adalah representasi refund pada response API.
+type RefundResponse struct {
+	ID            string `json:"id"`
+	TransactionID string `json:"transaction_id"`
+	Amount        int64  `json:"amount"`
+	Currency      string `json:"currency"`
+	Status        string `json:"status"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+// NewRefundResponse memetakan entity refund → response wire.
+func NewRefundResponse(r *domain.Refund) RefundResponse {
+	return RefundResponse{
+		ID:            r.ID.String(),
+		TransactionID: r.TransactionID.String(),
+		Amount:        r.AmountMinor,
+		Currency:      r.Currency,
+		Status:        string(r.Status),
+		Reason:        r.Reason,
+	}
+}
+
 // NewPaymentResponse memetakan entity domain → response wire.
 func NewPaymentResponse(t *domain.Transaction) PaymentResponse {
 	return PaymentResponse{

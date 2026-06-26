@@ -13,4 +13,5 @@ var (
 	ErrDuplicateReference  = errors.New("payment: external_reference already used for this app")
 	ErrInvalidSignature    = errors.New("payment: webhook signature verification failed")
 	ErrRateLimited         = errors.New("payment: too many requests, slow down")
+	ErrRefundNotSupported  = errors.New("payment: refund not supported for this payment channel")
 )
