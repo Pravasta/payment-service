@@ -2,12 +2,22 @@ package doku
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	domain "github.com/Pravasta/payment-service/internal/domain/payment"
 )
+
+// checkoutPath adalah Request-Target Direct API DOKU Checkout (Generate Payment).
+const checkoutPath = "/checkout/v1/payment"
+
+// maxAmountDigits: DOKU membatasi order.amount maksimal 16 digit (spec §4).
+const maxAmount int64 = 9_999_999_999_999_999 // 16 digit '9'
 
 // Config kredensial & endpoint DOKU (di-supply dari config + secret terenkripsi).
 type Config struct {
@@ -20,23 +30,162 @@ type Config struct {
 type Adapter struct {
 	cfg    Config
 	client *http.Client
+
+	// now & newRequestID dapat di-override pada test untuk hasil deterministik.
+	now          func() time.Time
+	newRequestID func() string
 }
 
 func New(cfg Config) *Adapter {
 	return &Adapter{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 30 * time.Second},
+		cfg:          cfg,
+		client:       &http.Client{Timeout: 30 * time.Second},
+		now:          time.Now,
+		newRequestID: uuid.NewString,
 	}
 }
 
 // pastikan memenuhi kontrak port.
 var _ domain.Gateway = (*Adapter)(nil)
 
-// CreateCharge memanggil DOKU Checkout (generate order). DOKU mengembalikan
-// payment.url sinkron (spec §2). TODO(impl): bangun request bertanda tangan,
-// kirim, map response -> ChargeResult.
+// --- DTO request/response Checkout DOKU (anti-corruption layer) ---
+
+type checkoutRequest struct {
+	Order    checkoutOrder     `json:"order"`
+	Payment  checkoutPayment   `json:"payment"`
+	Customer *checkoutCustomer `json:"customer,omitempty"`
+}
+
+type checkoutOrder struct {
+	Amount        int64  `json:"amount"` // IDR integer rupiah (exponent 0), JSON number
+	InvoiceNumber string `json:"invoice_number"`
+	Currency      string `json:"currency"`
+	CallbackURL   string `json:"callback_url,omitempty"`
+}
+
+type checkoutPayment struct {
+	PaymentDueDate int `json:"payment_due_date,omitempty"` // menit; kosong → default DOKU (60)
+}
+
+type checkoutCustomer struct {
+	Name  string `json:"name,omitempty"`
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
+type checkoutResponse struct {
+	Message json.RawMessage `json:"message"` // string atau []string
+	Order   struct {
+		InvoiceNumber string `json:"invoice_number"`
+		Amount        string `json:"amount"`
+		SessionID     string `json:"session_id"`
+	} `json:"order"`
+	Payment struct {
+		TokenID        string `json:"token_id"`
+		URL            string `json:"url"`
+		Status         string `json:"status"`
+		ExpiredDate    string `json:"expired_date"`     // yyyyMMddHHmmss (WIB)
+		ExpiredDateUTC string `json:"expired_date_utc"` // yyyyMMddHHmmss (UTC)
+	} `json:"payment"`
+}
+
+// CreateCharge memanggil DOKU Checkout (Generate Payment). DOKU mengembalikan
+// payment.url SINKRON pada response yang sama (spec §2). Alur canonical
+// created → pending terjadi dalam satu panggilan ini.
 func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (domain.ChargeResult, error) {
-	return domain.ChargeResult{}, errors.New("doku.CreateCharge: belum diimplementasikan")
+	if req.AmountMinor <= 0 {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: amount harus > 0")
+	}
+	if req.AmountMinor > maxAmount {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: amount melebihi batas DOKU (maks 16 digit)")
+	}
+	if req.ExternalReference == "" {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: external_reference (invoice_number) wajib")
+	}
+	if len(req.ExternalReference) > 64 {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: external_reference maksimal 64 karakter")
+	}
+
+	currency := req.Currency
+	if currency == "" {
+		currency = "IDR"
+	}
+
+	payload := checkoutRequest{
+		Order: checkoutOrder{
+			Amount:        req.AmountMinor,
+			InvoiceNumber: req.ExternalReference,
+			Currency:      currency,
+			CallbackURL:   req.ReturnURL,
+		},
+		Payment: checkoutPayment{PaymentDueDate: req.ExpiryMinutes},
+	}
+	if req.CustomerName != "" || req.CustomerEmail != "" {
+		payload.Customer = &checkoutCustomer{
+			Name:  req.CustomerName,
+			Email: req.CustomerEmail,
+		}
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: marshal body: %w", err)
+	}
+
+	resp, err := a.postSigned(ctx, checkoutPath, body)
+	if err != nil {
+		return domain.ChargeResult{}, err
+	}
+	if resp.statusCode < 200 || resp.statusCode >= 300 {
+		return domain.ChargeResult{}, parseError(resp.statusCode, resp.body)
+	}
+
+	var parsed checkoutResponse
+	if err := json.Unmarshal(resp.body, &parsed); err != nil {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: parse response: %w", err)
+	}
+	if parsed.Payment.URL == "" {
+		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: response tanpa payment.url")
+	}
+
+	var raw map[string]any
+	_ = json.Unmarshal(resp.body, &raw)
+
+	return domain.ChargeResult{
+		GatewayTxnID:     gatewayTxnID(parsed),
+		GatewayRequestID: resp.requestID, // Request-Id yang kita kirim — dipakai GetStatus/Refund
+		PaymentURL:       parsed.Payment.URL,
+		Status:           domain.StatusPending, // checkout dibuat; menunggu pembayaran
+		ExpiresAt:        parseCheckoutExpiry(parsed),
+		Raw:              raw,
+	}, nil
+}
+
+// gatewayTxnID memilih identifier transaksi DOKU dari response.
+func gatewayTxnID(p checkoutResponse) string {
+	if p.Payment.TokenID != "" {
+		return p.Payment.TokenID
+	}
+	return p.Order.SessionID
+}
+
+// parseCheckoutExpiry mengembalikan expiry sebagai UTC. Prefer expired_date_utc;
+// fallback expired_date (diinterpretasikan WIB/UTC+7) → dikonversi ke UTC.
+func parseCheckoutExpiry(p checkoutResponse) *time.Time {
+	const layout = "20060102150405"
+	if s := p.Payment.ExpiredDateUTC; s != "" {
+		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			return &t
+		}
+	}
+	if s := p.Payment.ExpiredDate; s != "" {
+		wib := time.FixedZone("WIB", 7*3600)
+		if t, err := time.ParseInLocation(layout, s, wib); err == nil {
+			u := t.UTC()
+			return &u
+		}
+	}
+	return nil
 }
 
 // ParseWebhook memverifikasi signature (crypto.go) lalu map payload -> WebhookEvent.
