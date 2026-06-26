@@ -44,12 +44,14 @@ func TestCreateCharge_SignedRequestAndParse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"message": ["SUCCESS"],
-			"order": {"invoice_number": "INV-2026-001", "amount": "50000", "session_id": "sess-xyz"},
-			"payment": {
-				"token_id": "tok-abc",
-				"url": "https://app-sandbox.doku.com/checkout/link/abc123",
-				"expired_date": "20260626130000",
-				"expired_date_utc": "20260626060000"
+			"response": {
+				"order": {"invoice_number": "INV-2026-001", "amount": "50000", "session_id": "sess-xyz"},
+				"payment": {
+					"token_id": "tok-abc",
+					"url": "https://app-sandbox.doku.com/checkout/link/abc123",
+					"expired_date": "20260626130000",
+					"expired_datetime": "2026-06-26T06:00:00Z"
+				}
 			}
 		}`))
 	}))
@@ -134,11 +136,11 @@ func TestCreateCharge_SignedRequestAndParse(t *testing.T) {
 		t.Errorf("Status = %q, ingin pending", res.Status)
 	}
 	if res.ExpiresAt == nil {
-		t.Fatal("ExpiresAt nil, ingin dari expired_date_utc")
+		t.Fatal("ExpiresAt nil, ingin dari expired_datetime")
 	}
 	wantExp := time.Date(2026, 6, 26, 6, 0, 0, 0, time.UTC)
 	if !res.ExpiresAt.Equal(wantExp) {
-		t.Errorf("ExpiresAt = %v, ingin %v (expired_date_utc)", res.ExpiresAt.UTC(), wantExp)
+		t.Errorf("ExpiresAt = %v, ingin %v (expired_datetime)", res.ExpiresAt.UTC(), wantExp)
 	}
 }
 
@@ -215,7 +217,7 @@ func TestCreateCharge_Validation(t *testing.T) {
 func TestParseCheckoutExpiry_WIBFallback(t *testing.T) {
 	// Hanya expired_date (WIB) tersedia → harus dikonversi ke UTC (kurang 7 jam).
 	var p checkoutResponse
-	p.Payment.ExpiredDate = "20260626130000" // 13:00 WIB
+	p.Response.Payment.ExpiredDate = "20260626130000" // 13:00 WIB
 	got := parseCheckoutExpiry(p)
 	if got == nil {
 		t.Fatal("ExpiresAt nil")

@@ -97,20 +97,24 @@ type checkoutCustomer struct {
 	Phone string `json:"phone,omitempty"`
 }
 
+// checkoutResponse: DOKU membungkus payload sukses di dalam objek "response"
+// (order/payment ada di dalamnya), bukan di level atas. "message" tetap di atas.
 type checkoutResponse struct {
-	Message json.RawMessage `json:"message"` // string atau []string
-	Order   struct {
-		InvoiceNumber string `json:"invoice_number"`
-		Amount        string `json:"amount"`
-		SessionID     string `json:"session_id"`
-	} `json:"order"`
-	Payment struct {
-		TokenID        string `json:"token_id"`
-		URL            string `json:"url"`
-		Status         string `json:"status"`
-		ExpiredDate    string `json:"expired_date"`     // yyyyMMddHHmmss (WIB)
-		ExpiredDateUTC string `json:"expired_date_utc"` // yyyyMMddHHmmss (UTC)
-	} `json:"payment"`
+	Message  json.RawMessage `json:"message"` // string atau []string
+	Response struct {
+		Order struct {
+			InvoiceNumber string `json:"invoice_number"`
+			Amount        string `json:"amount"`
+			SessionID     string `json:"session_id"`
+		} `json:"order"`
+		Payment struct {
+			TokenID         string `json:"token_id"`
+			URL             string `json:"url"`
+			Status          string `json:"status"`
+			ExpiredDate     string `json:"expired_date"`     // yyyyMMddHHmmss (WIB)
+			ExpiredDatetime string `json:"expired_datetime"` // RFC3339 UTC
+		} `json:"payment"`
+	} `json:"response"`
 }
 
 // CreateCharge memanggil DOKU Checkout (Generate Payment). DOKU mengembalikan
@@ -172,7 +176,7 @@ func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (r
 	if err := json.Unmarshal(resp.body, &parsed); err != nil {
 		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: parse response: %w", err)
 	}
-	if parsed.Payment.URL == "" {
+	if parsed.Response.Payment.URL == "" {
 		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: response tanpa payment.url")
 	}
 
@@ -182,7 +186,7 @@ func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (r
 	return domain.ChargeResult{
 		GatewayTxnID:     gatewayTxnID(parsed),
 		GatewayRequestID: resp.requestID, // Request-Id yang kita kirim — dipakai GetStatus/Refund
-		PaymentURL:       parsed.Payment.URL,
+		PaymentURL:       parsed.Response.Payment.URL,
 		Status:           domain.StatusPending, // checkout dibuat; menunggu pembayaran
 		ExpiresAt:        parseCheckoutExpiry(parsed),
 		Raw:              raw,
@@ -191,22 +195,23 @@ func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (r
 
 // gatewayTxnID memilih identifier transaksi DOKU dari response.
 func gatewayTxnID(p checkoutResponse) string {
-	if p.Payment.TokenID != "" {
-		return p.Payment.TokenID
+	if p.Response.Payment.TokenID != "" {
+		return p.Response.Payment.TokenID
 	}
-	return p.Order.SessionID
+	return p.Response.Order.SessionID
 }
 
-// parseCheckoutExpiry mengembalikan expiry sebagai UTC. Prefer expired_date_utc;
-// fallback expired_date (diinterpretasikan WIB/UTC+7) → dikonversi ke UTC.
+// parseCheckoutExpiry mengembalikan expiry sebagai UTC. Prefer expired_datetime
+// (RFC3339 UTC); fallback expired_date (yyyyMMddHHmmss, WIB/UTC+7) → ke UTC.
 func parseCheckoutExpiry(p checkoutResponse) *time.Time {
-	const layout = "20060102150405"
-	if s := p.Payment.ExpiredDateUTC; s != "" {
-		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
-			return &t
+	if s := p.Response.Payment.ExpiredDatetime; s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			u := t.UTC()
+			return &u
 		}
 	}
-	if s := p.Payment.ExpiredDate; s != "" {
+	if s := p.Response.Payment.ExpiredDate; s != "" {
+		const layout = "20060102150405"
 		wib := time.FixedZone("WIB", 7*3600)
 		if t, err := time.ParseInLocation(layout, s, wib); err == nil {
 			u := t.UTC()
