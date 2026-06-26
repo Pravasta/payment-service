@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -188,10 +190,94 @@ func parseCheckoutExpiry(p checkoutResponse) *time.Time {
 	return nil
 }
 
-// ParseWebhook memverifikasi signature (crypto.go) lalu map payload -> WebhookEvent.
-// TODO(impl): parse JSON body, mapStatus(transaction.status), isi PaymentMethod dari channel.id.
-func (a *Adapter) ParseWebhook(ctx context.Context, raw domain.WebhookPayload) (domain.WebhookEvent, error) {
-	return domain.WebhookEvent{}, errors.New("doku.ParseWebhook: belum diimplementasikan")
+// dokuNotification adalah bentuk body notifikasi DOKU (subset yang dipakai).
+type dokuNotification struct {
+	Order struct {
+		InvoiceNumber string `json:"invoice_number"`
+		Amount        string `json:"amount"`
+	} `json:"order"`
+	Transaction struct {
+		Status            string `json:"status"`
+		Date              string `json:"date"`
+		OriginalRequestID string `json:"original_request_id"`
+	} `json:"transaction"`
+	Service struct {
+		ID string `json:"id"`
+	} `json:"service"`
+	Channel struct {
+		ID string `json:"id"`
+	} `json:"channel"`
+	Acquirer struct {
+		ID string `json:"id"`
+	} `json:"acquirer"`
+}
+
+// ParseWebhook memverifikasi signature DOKU (skema HMAC-SHA256 komponen, spec §1)
+// lalu memetakan body notifikasi → WebhookEvent canonical.
+//
+// Mengembalikan domain.ErrInvalidSignature bila signature tidak valid.
+func (a *Adapter) ParseWebhook(_ context.Context, raw domain.WebhookPayload) (domain.WebhookEvent, error) {
+	sig := raw.Headers["Signature"]
+	params := SignatureParams{
+		ClientID:         raw.Headers["Client-Id"],
+		RequestID:        raw.Headers["Request-Id"],
+		RequestTimestamp: raw.Headers["Request-Timestamp"],
+		RequestTarget:    raw.URLPath,
+		RawBody:          raw.RawBody,
+	}
+	if !VerifySignature(a.cfg.SecretKey, sig, params) {
+		return domain.WebhookEvent{}, domain.ErrInvalidSignature
+	}
+
+	var n dokuNotification
+	if err := json.Unmarshal(raw.RawBody, &n); err != nil {
+		return domain.WebhookEvent{}, fmt.Errorf("doku.ParseWebhook: parse body: %w", err)
+	}
+
+	var rawMap map[string]any
+	_ = json.Unmarshal(raw.RawBody, &rawMap)
+
+	return domain.WebhookEvent{
+		GatewayEventID:    raw.Headers["Request-Id"], // dedup
+		ExternalReference: n.Order.InvoiceNumber,
+		OriginalRequestID: n.Transaction.OriginalRequestID, // == gateway_request_id kita
+		Status:            mapStatus(n.Transaction.Status),
+		PaymentMethod:     n.Channel.ID, // spec §9.3
+		AmountMinor:       parseAmountMinor(n.Order.Amount),
+		OccurredAt:        parseNotifTime(n.Transaction.Date, raw.Headers["Request-Timestamp"]),
+		Raw:               rawMap,
+	}, nil
+}
+
+// parseAmountMinor mem-parse amount DOKU ("50000" atau "50000.00") menjadi minor
+// unit. Untuk IDR (exponent 0) hanya bagian integer yang bermakna.
+func parseAmountMinor(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		s = s[:i]
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// parseNotifTime mencoba beberapa format waktu DOKU; fallback ke timestamp header lalu now.
+func parseNotifTime(date, headerTS string) time.Time {
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05Z", "20060102150405"} {
+		if date != "" {
+			if t, err := time.Parse(layout, date); err == nil {
+				return t.UTC()
+			}
+		}
+	}
+	if t, err := time.Parse(dokuTimeFormat, headerTS); err == nil {
+		return t.UTC()
+	}
+	return time.Now().UTC()
 }
 
 // GetStatus memanggil Check Status DOKU: GET /orders/v1/status/{invoice|request-id} (spec §5).

@@ -16,11 +16,13 @@ import (
 // --- mock Repository ---
 
 type mockRepo struct {
-	byID      map[uuid.UUID]*domain.Transaction
-	byIdem    map[string]*domain.Transaction
-	byExtRef  map[string]*domain.Transaction
-	events    []*domain.TransactionEvent
-	createErr error
+	byID       map[uuid.UUID]*domain.Transaction
+	byIdem     map[string]*domain.Transaction
+	byExtRef   map[string]*domain.Transaction
+	events     []*domain.TransactionEvent
+	outbox     []*domain.OutboxMessage
+	inboxSaved int
+	createErr  error
 }
 
 func newMockRepo() *mockRepo {
@@ -122,6 +124,51 @@ func (m *mockRepo) AppendEvent(_ context.Context, e *domain.TransactionEvent) er
 	return nil
 }
 
+// --- webhook support (issue 0008) ---
+
+func (m *mockRepo) GetByGatewayRequestID(_ context.Context, _, requestID string) (*domain.Transaction, error) {
+	for _, t := range m.byID {
+		if t.GatewayRequestID == requestID && requestID != "" {
+			return t, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockRepo) SaveWebhookInbox(_ context.Context, rec *domain.WebhookInboxRecord) error {
+	if rec.ID == uuid.Nil {
+		rec.ID = uuid.New()
+	}
+	m.inboxSaved++
+	return nil
+}
+
+func (m *mockRepo) UpdateWebhookInbox(_ context.Context, _ *domain.WebhookInboxRecord) error {
+	return nil
+}
+
+func (m *mockRepo) EventExists(_ context.Context, gatewayEventID string) (bool, error) {
+	if gatewayEventID == "" {
+		return false, nil
+	}
+	for _, e := range m.events {
+		if e.GatewayEventID == gatewayEventID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *mockRepo) ApplyWebhook(_ context.Context, txn *domain.Transaction, event *domain.TransactionEvent, outbox *domain.OutboxMessage) error {
+	cp := *txn
+	m.byID[txn.ID] = &cp
+	m.events = append(m.events, event)
+	if outbox != nil {
+		m.outbox = append(m.outbox, outbox)
+	}
+	return nil
+}
+
 func (m *mockRepo) eventTypes() []domain.EventType {
 	var out []domain.EventType
 	for _, e := range m.events {
@@ -133,9 +180,11 @@ func (m *mockRepo) eventTypes() []domain.EventType {
 // --- mock Gateway ---
 
 type mockGateway struct {
-	calls     int
-	result    domain.ChargeResult
-	chargeErr error
+	calls        int
+	result       domain.ChargeResult
+	chargeErr    error
+	webhookEvent domain.WebhookEvent
+	webhookErr   error
 }
 
 func (g *mockGateway) CreateCharge(_ context.Context, _ domain.ChargeRequest) (domain.ChargeResult, error) {
@@ -147,7 +196,7 @@ func (g *mockGateway) CreateCharge(_ context.Context, _ domain.ChargeRequest) (d
 }
 
 func (g *mockGateway) ParseWebhook(_ context.Context, _ domain.WebhookPayload) (domain.WebhookEvent, error) {
-	return domain.WebhookEvent{}, errors.New("not impl")
+	return g.webhookEvent, g.webhookErr
 }
 func (g *mockGateway) GetStatus(_ context.Context, _ domain.StatusRef) (domain.StatusResult, error) {
 	return domain.StatusResult{}, errors.New("not impl")

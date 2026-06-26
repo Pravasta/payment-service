@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -53,6 +54,10 @@ func (r *PaymentRepository) GetByGatewayTxnID(ctx context.Context, gateway, gate
 	return r.first(ctx, "gateway = ? AND gateway_txn_id = ?", gateway, gatewayTxnID)
 }
 
+func (r *PaymentRepository) GetByGatewayRequestID(ctx context.Context, gateway, requestID string) (*domain.Transaction, error) {
+	return r.first(ctx, "gateway = ? AND gateway_request_id = ?", gateway, requestID)
+}
+
 func (r *PaymentRepository) ListTransactions(ctx context.Context, f domain.ListFilter) ([]*domain.Transaction, error) {
 	q := r.db.WithContext(ctx).Model(&model.Transaction{}).Where("app_id = ?", f.AppID)
 	if f.Status != "" {
@@ -91,6 +96,89 @@ func (r *PaymentRepository) AppendEvent(ctx context.Context, e *domain.Transacti
 		e.ID = m.ID
 	}
 	return r.db.WithContext(ctx).Create(m).Error
+}
+
+// --- webhook (detailed-design §6.1) ---
+
+func (r *PaymentRepository) SaveWebhookInbox(ctx context.Context, rec *domain.WebhookInboxRecord) error {
+	m := inboxToModel(rec)
+	if m.ID == uuid.Nil {
+		m.ID = uuid.New()
+		rec.ID = m.ID
+	}
+	return r.db.WithContext(ctx).Create(m).Error
+}
+
+func (r *PaymentRepository) UpdateWebhookInbox(ctx context.Context, rec *domain.WebhookInboxRecord) error {
+	return r.db.WithContext(ctx).Save(inboxToModel(rec)).Error
+}
+
+func (r *PaymentRepository) EventExists(ctx context.Context, gatewayEventID string) (bool, error) {
+	if gatewayEventID == "" {
+		return false, nil
+	}
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.TransactionEvent{}).
+		Where("gateway_event_id = ?", gatewayEventID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// ApplyWebhook menulis update txn + event + outbox dalam SATU transaksi DB
+// (atomic, detailed-design §6.1 langkah 5).
+func (r *PaymentRepository) ApplyWebhook(ctx context.Context, txn *domain.Transaction, event *domain.TransactionEvent, outbox *domain.OutboxMessage) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(toModel(txn)).Error; err != nil {
+			return err
+		}
+		em := eventToModel(event)
+		if em.ID == uuid.Nil {
+			em.ID = uuid.New()
+			event.ID = em.ID
+		}
+		if err := tx.Create(em).Error; err != nil {
+			return err
+		}
+		if outbox != nil {
+			om := outboxToModel(outbox)
+			if om.ID == uuid.Nil {
+				om.ID = uuid.New()
+				outbox.ID = om.ID
+			}
+			if err := tx.Create(om).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func inboxToModel(rec *domain.WebhookInboxRecord) *model.WebhookInbox {
+	return &model.WebhookInbox{
+		ID:            rec.ID,
+		Gateway:       rec.Gateway,
+		Signature:     rec.Signature,
+		Headers:       model.JSONMap(rec.Headers),
+		RawBody:       rec.RawBody,
+		Verified:      rec.Verified,
+		Processed:     rec.Processed,
+		TransactionID: rec.TransactionID,
+		ReceivedAt:    rec.ReceivedAt,
+	}
+}
+
+func outboxToModel(o *domain.OutboxMessage) *model.NotificationOutbox {
+	return &model.NotificationOutbox{
+		ID:            o.ID,
+		AppID:         o.AppID,
+		TransactionID: o.TransactionID,
+		EventID:       o.EventID,
+		EventType:     o.EventType,
+		Payload:       model.JSONMap(o.Payload),
+		Status:        "pending",
+		NextRetryAt:   time.Now().UTC(),
+	}
 }
 
 func (r *PaymentRepository) first(ctx context.Context, query string, args ...any) (*domain.Transaction, error) {

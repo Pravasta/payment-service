@@ -74,6 +74,8 @@ func FromDomain(err error) *AppError {
 		return Conflict("external_reference sudah dipakai untuk app ini")
 	case errors.Is(err, domain.ErrInvalidTransition):
 		return UnprocessableEntity("transisi status pembayaran tidak valid")
+	case errors.Is(err, domain.ErrInvalidSignature):
+		return Unauthorized("signature webhook tidak valid")
 	default:
 		return Internal()
 	}
