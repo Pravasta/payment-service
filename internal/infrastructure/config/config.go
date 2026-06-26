@@ -16,11 +16,12 @@ import (
 
 // Config adalah root konfigurasi aplikasi.
 type Config struct {
-	App      AppConfig
-	Server   ServerConfig
-	Database DatabaseConfig
-	Security SecurityConfig
-	DOKU     DOKUConfig
+	App           AppConfig
+	Server        ServerConfig
+	Database      DatabaseConfig
+	Security      SecurityConfig
+	DOKU          DOKUConfig
+	Observability ObservabilityConfig
 }
 
 type AppConfig struct {
@@ -67,6 +68,14 @@ type DOKUConfig struct {
 	SecretKey   string
 }
 
+// ObservabilityConfig menyetel observability (metrik Prometheus, dsb).
+type ObservabilityConfig struct {
+	// MetricsAddr adalah alamat listen endpoint /metrics pada worker (background
+	// job). API server mengekspos /metrics pada port HTTP utamanya, sehingga
+	// alamat ini khusus dipakai worker yang tidak punya HTTP server sendiri.
+	MetricsAddr string
+}
+
 // Load membaca konfigurasi dari environment variable. File `.env` dimuat
 // otomatis bila ada (tidak error bila tidak ada — mis. di produksi).
 func Load() (*Config, error) {
@@ -102,6 +111,9 @@ func Load() (*Config, error) {
 			BaseURL:     getEnv("DOKU_BASE_URL", "https://api-sandbox.doku.com"),
 			ClientID:    getEnv("DOKU_CLIENT_ID", ""),
 			SecretKey:   getEnv("DOKU_SECRET_KEY", ""),
+		},
+		Observability: ObservabilityConfig{
+			MetricsAddr: getEnv("METRICS_ADDR", ":9091"),
 		},
 	}
 

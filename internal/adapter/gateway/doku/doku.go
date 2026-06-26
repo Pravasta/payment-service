@@ -27,23 +27,46 @@ type Config struct {
 	SecretKey string
 }
 
+// gatewayName adalah label gateway untuk metrik/observability.
+const gatewayName = "doku"
+
+// Observer adalah port observability opsional untuk adapter (di-inject dari cmd).
+// Dideklarasikan di sisi konsumen agar adapter tidak meng-import package metrics.
+type Observer interface {
+	ObserveCharge(gateway string, success bool, dur time.Duration)
+	ObserveWebhook(gateway string, ok bool)
+}
+
+// Option mengonfigurasi Adapter saat konstruksi (functional options).
+type Option func(*Adapter)
+
+// WithObserver memasang observer metrik. Tanpa ini, instrumentasi di-skip (nil-safe).
+func WithObserver(o Observer) Option {
+	return func(a *Adapter) { a.obs = o }
+}
+
 // Adapter mengimplementasi domain.Gateway untuk DOKU.
 type Adapter struct {
 	cfg    Config
 	client *http.Client
+	obs    Observer
 
 	// now & newRequestID dapat di-override pada test untuk hasil deterministik.
 	now          func() time.Time
 	newRequestID func() string
 }
 
-func New(cfg Config) *Adapter {
-	return &Adapter{
+func New(cfg Config, opts ...Option) *Adapter {
+	a := &Adapter{
 		cfg:          cfg,
 		client:       &http.Client{Timeout: 30 * time.Second},
 		now:          time.Now,
 		newRequestID: uuid.NewString,
 	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 // pastikan memenuhi kontrak port.
@@ -93,7 +116,11 @@ type checkoutResponse struct {
 // CreateCharge memanggil DOKU Checkout (Generate Payment). DOKU mengembalikan
 // payment.url SINKRON pada response yang sama (spec §2). Alur canonical
 // created → pending terjadi dalam satu panggilan ini.
-func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (domain.ChargeResult, error) {
+func (a *Adapter) CreateCharge(ctx context.Context, req domain.ChargeRequest) (res domain.ChargeResult, err error) {
+	if a.obs != nil {
+		start := a.now()
+		defer func() { a.obs.ObserveCharge(gatewayName, err == nil, a.now().Sub(start)) }()
+	}
 	if req.AmountMinor <= 0 {
 		return domain.ChargeResult{}, fmt.Errorf("doku.CreateCharge: amount harus > 0")
 	}
@@ -215,7 +242,10 @@ type dokuNotification struct {
 // lalu memetakan body notifikasi → WebhookEvent canonical.
 //
 // Mengembalikan domain.ErrInvalidSignature bila signature tidak valid.
-func (a *Adapter) ParseWebhook(_ context.Context, raw domain.WebhookPayload) (domain.WebhookEvent, error) {
+func (a *Adapter) ParseWebhook(_ context.Context, raw domain.WebhookPayload) (evt domain.WebhookEvent, err error) {
+	if a.obs != nil {
+		defer func() { a.obs.ObserveWebhook(gatewayName, err == nil) }()
+	}
 	sig := raw.Headers["Signature"]
 	params := SignatureParams{
 		ClientID:         raw.Headers["Client-Id"],

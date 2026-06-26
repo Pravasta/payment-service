@@ -124,6 +124,35 @@ func (r *OutboxRepository) Replay(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// Counts mengembalikan jumlah pesan outbox per status untuk gauge backlog
+// observability (pending = antri/akan retry, dead = dead-letter). Dipanggil
+// periodik oleh worker; bukan bagian dari port outbox.Store.
+func (r *OutboxRepository) Counts(ctx context.Context) (pending, dead int64, err error) {
+	type row struct {
+		Status string
+		N      int64
+	}
+	var rows []row
+	err = r.db.WithContext(ctx).
+		Model(&model.NotificationOutbox{}).
+		Select("status, count(*) as n").
+		Where("status IN ?", []string{"pending", "dead"}).
+		Group("status").
+		Scan(&rows).Error
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, rw := range rows {
+		switch rw.Status {
+		case "pending":
+			pending = rw.N
+		case "dead":
+			dead = rw.N
+		}
+	}
+	return pending, dead, nil
+}
+
 func truncate(s string, n int) string {
 	if len(s) > n {
 		return s[:n]

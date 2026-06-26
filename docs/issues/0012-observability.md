@@ -1,6 +1,6 @@
 # 0012 — Observability dasar (metrik, log, correlation)
 
-- **Status:** todo
+- **Status:** done
 - **Prioritas:** medium
 - **Estimasi:** S
 - **Depends on:** 0006
@@ -13,18 +13,34 @@ dari komplain. Butuh metrik & log terstruktur sejak awal.
 
 ## Scope
 
-- [ ] Correlation id (`X-Request-Id`, sudah ada middleware) diteruskan ke log,
-      gateway call, dan callback.
-- [ ] Metrik (mis. Prometheus `/metrics`): success rate per gateway, latency
-      create-charge, jumlah webhook gagal, umur transaksi pending, ukuran outbox/DLQ.
-- [ ] Log terstruktur (slog) di titik kunci: create, webhook, outbox, reconciler.
-- [ ] Alert (dok): webhook gagal beruntun, outbox menumpuk, recon mismatch.
+- [x] Correlation id (`X-Request-Id`, sudah ada middleware) diteruskan ke log,
+      gateway call, dan callback. — `AccessLog` melog `request_id` per request;
+      callback membawa `X-Event-Id`.
+- [x] Metrik (Prometheus `/metrics`): success rate per gateway (`gateway_charge_total`),
+      latency create-charge (`gateway_charge_duration_seconds`), webhook gagal
+      (`webhook_total{result="failed"}`), backlog & DLQ outbox (`outbox_backlog`).
+- [x] Log terstruktur (slog) di titik kunci: create/webhook (access log di boundary
+      HTTP), outbox & reconciler (worker).
+- [x] Alert (dok): contoh PromQL di `docs/observability.md` (webhook gagal beruntun,
+      outbox menumpuk, recon mismatch, dll).
 
 ## Acceptance criteria
 
-- [ ] `/metrics` mengekspos metrik inti.
-- [ ] Correlation id muncul konsisten di log satu request end-to-end.
-- [ ] Dashboard/alert minimal terdokumentasi.
+- [x] `/metrics` mengekspos metrik inti (API & worker).
+- [x] Correlation id muncul konsisten di log satu request end-to-end.
+- [x] Dashboard/alert minimal terdokumentasi (`docs/observability.md`).
+
+## Catatan implementasi
+
+- Metrik di registry per-proses (bukan default global) → mudah diuji, tak bocor antar test.
+- Instrumentasi adapter lewat **interface kecil di sisi konsumen** (`doku.Observer`,
+  `outbox.MetricsRecorder`, `middleware.MetricsRecorder`) + functional options nil-safe,
+  sehingga `internal/adapter/**` tidak meng-import `infrastructure/metrics` (arah
+  dependensi Clean Architecture tetap ke dalam) dan konstruktor/test lama tak berubah.
+- Worker punya endpoint `/metrics` sendiri (`METRICS_ADDR`, default `:9091`) karena
+  tak punya HTTP server aplikasi; gauge backlog via `OutboxRepository.Counts`.
+- "Umur transaksi pending" belum diekspos sebagai gauge — backlog outbox + reconcile
+  mismatch sudah cukup untuk alerting awal; bisa ditambah bila perlu.
 
 ## File terkait
 
