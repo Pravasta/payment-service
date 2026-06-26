@@ -201,6 +201,9 @@ type mockGateway struct {
 	statusResult domain.StatusResult
 	statusErr    error
 	statusCalls  int
+	refundResult domain.RefundResult
+	refundErr    error
+	refundCalls  int
 }
 
 func (g *mockGateway) CreateCharge(_ context.Context, _ domain.ChargeRequest) (domain.ChargeResult, error) {
@@ -219,7 +222,8 @@ func (g *mockGateway) GetStatus(_ context.Context, _ domain.StatusRef) (domain.S
 	return g.statusResult, g.statusErr
 }
 func (g *mockGateway) Refund(_ context.Context, _ domain.RefundRequest) (domain.RefundResult, error) {
-	return domain.RefundResult{}, errors.New("not impl")
+	g.refundCalls++
+	return g.refundResult, g.refundErr
 }
 
 func okGateway() *mockGateway {

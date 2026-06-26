@@ -52,13 +52,13 @@ func main() {
 	credRepo := repository.NewCredentialRepository(db)
 	idemRepo := repository.NewIdempotencyRepository(db)
 	outboxRepo := repository.NewOutboxRepository(db)
+	refundRepo := repository.NewRefundRepository(db)
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
 		SecretKey: cfg.DOKU.SecretKey,
 	})
-	// TODO: RefundRepository (saat refund diimplementasikan).
-	paymentSvc := usecase.NewService(paymentRepo, nil, dokuGW)
+	paymentSvc := usecase.NewService(paymentRepo, refundRepo, dokuGW)
 
 	// Readiness: /readyz sehat hanya bila DB bisa di-ping.
 	sqlDB, err := db.DB()

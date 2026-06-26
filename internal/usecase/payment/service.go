@@ -261,17 +261,3 @@ func (s *Service) ListPayments(ctx context.Context, in ListPaymentsInput) (ListP
 	}
 	return res, nil
 }
-
-// RefundInput adalah input use-case refund.
-type RefundInput struct {
-	AppID          uuid.UUID
-	TransactionID  uuid.UUID
-	IdempotencyKey string
-	AmountMinor    int64 // 0 = full refund
-	Reason         string
-}
-
-// Refund membuat & mengeksekusi refund (detailed-design §8). TODO(impl).
-func (s *Service) Refund(ctx context.Context, in RefundInput) (*domain.Refund, error) {
-	return nil, errors.New("Refund: belum diimplementasikan")
-}

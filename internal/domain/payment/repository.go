@@ -87,4 +87,9 @@ type RefundRepository interface {
 	Update(ctx context.Context, r *Refund) error
 	GetByID(ctx context.Context, appID, id uuid.UUID) (*Refund, error)
 	GetByIdempotencyKey(ctx context.Context, appID uuid.UUID, key string) (*Refund, error)
+
+	// ApplyRefundSucceeded menulis (dalam SATU transaksi DB) finalisasi refund:
+	// update refund (succeeded) + update transaction (refunded_amount/status) +
+	// insert transaction_event + insert notification_outbox.
+	ApplyRefundSucceeded(ctx context.Context, refund *Refund, txn *Transaction, event *TransactionEvent, outbox *OutboxMessage) error
 }
