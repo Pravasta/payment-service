@@ -14,6 +14,7 @@ import (
 	"github.com/Pravasta/payment-service/internal/adapter/http/apperror"
 	"github.com/Pravasta/payment-service/internal/adapter/http/dto"
 	appmw "github.com/Pravasta/payment-service/internal/adapter/http/middleware"
+	domain "github.com/Pravasta/payment-service/internal/domain/payment"
 	usecase "github.com/Pravasta/payment-service/internal/usecase/payment"
 )
 
@@ -215,9 +216,32 @@ func (h *PaymentHandler) Refund(w http.ResponseWriter, r *http.Request) {
 	notImplemented(w, "refund")
 }
 
-// WebhookDOKU — POST /v1/webhooks/doku (§4.6). TODO(impl).
+// WebhookDOKU — POST /v1/webhooks/doku (§4.6). Diverifikasi via signature DOKU
+// di dalam use-case (bukan auth API key). Selalu balas cepat (§6.1 langkah 6).
 func (h *PaymentHandler) WebhookDOKU(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w, "doku webhook")
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
+	if err != nil {
+		writeError(w, r, apperror.BadRequest("gagal membaca body webhook"))
+		return
+	}
+
+	raw := domain.WebhookPayload{
+		Headers: map[string]string{
+			"Client-Id":         r.Header.Get("Client-Id"),
+			"Request-Id":        r.Header.Get("Request-Id"),
+			"Request-Timestamp": r.Header.Get("Request-Timestamp"),
+			"Signature":         r.Header.Get("Signature"),
+		},
+		RawBody: body,
+		URLPath: r.URL.Path, // Request-Target untuk verifikasi signature
+	}
+
+	if err := h.svc.HandleDOKUWebhook(r.Context(), raw); err != nil {
+		// Signature invalid → 401; error lain → 5xx (DOKU retry).
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func notImplemented(w http.ResponseWriter, what string) {

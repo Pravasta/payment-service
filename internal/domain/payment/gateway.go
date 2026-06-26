@@ -58,9 +58,10 @@ type WebhookPayload struct {
 
 // WebhookEvent adalah event canonical hasil parsing webhook.
 type WebhookEvent struct {
-	GatewayEventID    string // DOKU Request-Id (dedup)
-	ExternalReference string
-	GatewayTxnID      string
+	GatewayEventID    string // DOKU Request-Id notifikasi (dedup gateway_event_id)
+	ExternalReference string // order.invoice_number
+	GatewayTxnID      string // identifier transaksi DOKU (bila ada)
+	OriginalRequestID string // DOKU original_request_id == gateway_request_id kita (match utama)
 	Status            Status
 	PaymentMethod     string // dari channel.id (spec §9.3)
 	AmountMinor       int64
