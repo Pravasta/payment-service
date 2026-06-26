@@ -34,6 +34,7 @@ func main() {
 		&model.Refund{},
 		&model.WebhookInbox{},
 		&model.NotificationOutbox{},
+		&model.IdempotencyKey{},
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "migrate error:", err)
 		os.Exit(1)
