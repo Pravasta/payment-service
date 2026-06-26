@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/Pravasta/payment-service/internal/adapter/http/apperror"
@@ -32,6 +33,18 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var ae *apperror.AppError
 	if !errors.As(err, &ae) {
 		ae = apperror.FromDomain(err)
+	}
+	// Error 5xx = tak terduga (mis. gateway gagal). Pesan asli SENGAJA tidak
+	// dibocorkan ke client, jadi log di sini — dengan request_id — agar penyebab
+	// sebenarnya tetap bisa ditelusuri di server. Error 4xx tidak dilog (wajar).
+	if ae.HTTPStatus >= http.StatusInternalServerError {
+		slog.Default().Error("internal server error",
+			"request_id", appmw.RequestIDFromContext(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"code", ae.Code,
+			"err", err,
+		)
 	}
 	writeJSON(w, ae.HTTPStatus, errorResponse{
 		Code:      ae.Code,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,6 +31,8 @@ func main() {
 	}
 
 	log := logger.New(cfg.App.Env)
+	// Jadikan default agar helper delivery (writeError) memakai logger yang sama.
+	slog.SetDefault(log)
 
 	db, err := database.New(cfg.Database)
 	if err != nil {
