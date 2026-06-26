@@ -180,9 +180,77 @@ func (s *Service) appendEvent(ctx context.Context, txn *domain.Transaction, t do
 	})
 }
 
-// GetPayment mengembalikan transaksi (read murni). TODO(impl).
+// GetPayment mengembalikan transaksi milik app (read murni, ter-scope per app_id).
 func (s *Service) GetPayment(ctx context.Context, appID, id uuid.UUID) (*domain.Transaction, error) {
-	return nil, errors.New("GetPayment: belum diimplementasikan")
+	return s.repo.GetByID(ctx, appID, id)
+}
+
+// GetPaymentByReference mencari transaksi berdasarkan external_reference milik app.
+func (s *Service) GetPaymentByReference(ctx context.Context, appID uuid.UUID, ref string) (*domain.Transaction, error) {
+	if ref == "" {
+		return nil, fmt.Errorf("%w: external_reference wajib", domain.ErrInvalidAmount)
+	}
+	return s.repo.GetByExternalReference(ctx, appID, ref)
+}
+
+// maxListLimit & defaultListLimit membatasi ukuran halaman list.
+const (
+	defaultListLimit = 50
+	maxListLimit     = 100
+)
+
+// ListPaymentsInput adalah filter list (cursor sudah ter-decode oleh delivery layer).
+type ListPaymentsInput struct {
+	AppID         uuid.UUID
+	Status        string
+	From          *time.Time
+	To            *time.Time
+	Limit         int
+	CursorCreated *time.Time
+	CursorID      *uuid.UUID
+}
+
+// ListPaymentsResult membawa item + info pagination untuk halaman berikutnya.
+type ListPaymentsResult struct {
+	Items             []*domain.Transaction
+	HasMore           bool
+	NextCursorCreated *time.Time
+	NextCursorID      *uuid.UUID
+}
+
+// ListPayments mengembalikan transaksi ter-scope per app dengan keyset pagination.
+func (s *Service) ListPayments(ctx context.Context, in ListPaymentsInput) (ListPaymentsResult, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	if limit > maxListLimit {
+		limit = maxListLimit
+	}
+
+	// Ambil limit+1 untuk mendeteksi apakah masih ada halaman berikutnya.
+	rows, err := s.repo.ListTransactions(ctx, domain.ListFilter{
+		AppID:         in.AppID,
+		Status:        domain.Status(in.Status),
+		From:          in.From,
+		To:            in.To,
+		Limit:         limit + 1,
+		CursorCreated: in.CursorCreated,
+		CursorID:      in.CursorID,
+	})
+	if err != nil {
+		return ListPaymentsResult{}, err
+	}
+
+	res := ListPaymentsResult{Items: rows}
+	if len(rows) > limit {
+		res.HasMore = true
+		res.Items = rows[:limit]
+		last := res.Items[len(res.Items)-1]
+		res.NextCursorCreated = &last.CreatedAt
+		res.NextCursorID = &last.ID
+	}
+	return res, nil
 }
 
 // SyncPayment memaksa refresh status dari gateway (rate-limited). TODO(impl).

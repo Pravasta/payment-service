@@ -3,7 +3,13 @@
 package dto
 
 import (
+	"encoding/base64"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	domain "github.com/Pravasta/payment-service/internal/domain/payment"
 )
@@ -36,6 +42,40 @@ type PaymentResponse struct {
 	ExpiresAt         *time.Time     `json:"expires_at,omitempty"`
 	PaidAt            *time.Time     `json:"paid_at,omitempty"`
 	CreatedAt         time.Time      `json:"created_at"`
+}
+
+// ListPaymentsResponse adalah response list + pagination (detailed-design §4.5).
+type ListPaymentsResponse struct {
+	Items      []PaymentResponse `json:"items"`
+	HasMore    bool              `json:"has_more"`
+	NextCursor string            `json:"next_cursor,omitempty"`
+}
+
+// EncodeCursor membuat cursor opaque dari (created_at, id) baris terakhir.
+func EncodeCursor(createdAt time.Time, id uuid.UUID) string {
+	raw := fmt.Sprintf("%d:%s", createdAt.UTC().UnixNano(), id.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+// DecodeCursor mem-parse cursor opaque kembali ke (created_at, id).
+func DecodeCursor(s string) (time.Time, uuid.UUID, error) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, uuid.Nil, fmt.Errorf("cursor tidak valid")
+	}
+	parts := strings.SplitN(string(b), ":", 2)
+	if len(parts) != 2 {
+		return time.Time{}, uuid.Nil, fmt.Errorf("cursor tidak valid")
+	}
+	ns, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return time.Time{}, uuid.Nil, fmt.Errorf("cursor tidak valid")
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return time.Time{}, uuid.Nil, fmt.Errorf("cursor tidak valid")
+	}
+	return time.Unix(0, ns).UTC(), id, nil
 }
 
 // NewPaymentResponse memetakan entity domain → response wire.

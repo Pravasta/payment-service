@@ -5,7 +5,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/Pravasta/payment-service/internal/adapter/http/apperror"
@@ -78,9 +81,128 @@ func decodeJSON(r *http.Request, dst any) error {
 	return nil
 }
 
-// Get — GET /v1/payments/{id} (§4.2). TODO(impl).
+// Get — GET /v1/payments/{id} (§4.2). Ter-scope per app_id (isolasi).
 func (h *PaymentHandler) Get(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w, "get payment")
+	appID := appmw.AppIDFromContext(r.Context())
+	if appID == uuid.Nil {
+		writeError(w, r, apperror.Internal())
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, apperror.BadRequest("id pembayaran tidak valid"))
+		return
+	}
+
+	txn, err := h.svc.GetPayment(r.Context(), appID, id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.NewPaymentResponse(txn))
+}
+
+// GetByReference — GET /v1/payments?external_reference=... (§4.2).
+func (h *PaymentHandler) GetByReference(w http.ResponseWriter, r *http.Request) {
+	appID := appmw.AppIDFromContext(r.Context())
+	if appID == uuid.Nil {
+		writeError(w, r, apperror.Internal())
+		return
+	}
+
+	ref := r.URL.Query().Get("external_reference")
+	if ref == "" {
+		writeError(w, r, apperror.BadRequest("query parameter external_reference wajib"))
+		return
+	}
+
+	txn, err := h.svc.GetPaymentByReference(r.Context(), appID, ref)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.NewPaymentResponse(txn))
+}
+
+// List — GET /v1/transactions (§4.5). Filter status/from/to + cursor pagination,
+// ter-scope per app_id.
+func (h *PaymentHandler) List(w http.ResponseWriter, r *http.Request) {
+	appID := appmw.AppIDFromContext(r.Context())
+	if appID == uuid.Nil {
+		writeError(w, r, apperror.Internal())
+		return
+	}
+
+	q := r.URL.Query()
+	in := usecase.ListPaymentsInput{AppID: appID, Status: q.Get("status")}
+
+	if v := q.Get("from"); v != "" {
+		t, err := parseDateParam(v)
+		if err != nil {
+			writeError(w, r, apperror.BadRequest("parameter from tidak valid (gunakan YYYY-MM-DD atau RFC3339)"))
+			return
+		}
+		in.From = &t
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := parseDateParam(v)
+		if err != nil {
+			writeError(w, r, apperror.BadRequest("parameter to tidak valid (gunakan YYYY-MM-DD atau RFC3339)"))
+			return
+		}
+		in.To = &t
+	}
+	if v := q.Get("limit"); v != "" {
+		n, err := parseIntParam(v)
+		if err != nil || n < 0 {
+			writeError(w, r, apperror.BadRequest("parameter limit tidak valid"))
+			return
+		}
+		in.Limit = n
+	}
+	if v := q.Get("cursor"); v != "" {
+		created, id, err := dto.DecodeCursor(v)
+		if err != nil {
+			writeError(w, r, apperror.BadRequest("cursor tidak valid"))
+			return
+		}
+		in.CursorCreated = &created
+		in.CursorID = &id
+	}
+
+	res, err := h.svc.ListPayments(r.Context(), in)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	items := make([]dto.PaymentResponse, len(res.Items))
+	for i, t := range res.Items {
+		items[i] = dto.NewPaymentResponse(t)
+	}
+	out := dto.ListPaymentsResponse{Items: items, HasMore: res.HasMore}
+	if res.HasMore && res.NextCursorCreated != nil && res.NextCursorID != nil {
+		out.NextCursor = dto.EncodeCursor(*res.NextCursorCreated, *res.NextCursorID)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// parseDateParam menerima YYYY-MM-DD atau RFC3339.
+func parseDateParam(s string) (time.Time, error) {
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.UTC(), nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t.UTC(), nil
+}
+
+// parseIntParam mem-parse query parameter integer.
+func parseIntParam(s string) (int, error) {
+	return strconv.Atoi(s)
 }
 
 // Sync — POST /v1/payments/{id}/sync (§4.3). TODO(impl).

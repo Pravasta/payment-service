@@ -48,6 +48,8 @@ func NewRouter(
 		// Endpoint tulis (create/refund) memerlukan Idempotency-Key (detailed-design §5).
 		r.With(appmw.RequireScope("payments:write"), idempotent).Post("/payments", payments.Create)
 		r.With(appmw.RequireScope("payments:read")).Get("/payments/{id}", payments.Get)
+		r.With(appmw.RequireScope("payments:read")).Get("/payments", payments.GetByReference)
+		r.With(appmw.RequireScope("payments:read")).Get("/transactions", payments.List)
 		r.With(appmw.RequireScope("payments:write")).Post("/payments/{id}/sync", payments.Sync)
 		r.With(appmw.RequireScope("payments:write"), idempotent).Post("/payments/{id}/refunds", payments.Refund)
 
