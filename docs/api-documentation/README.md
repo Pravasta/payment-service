@@ -243,21 +243,43 @@ Semua error seragam:
 
 ## 11. Melihat Swagger
 
-`openapi.yaml` bisa dibuka di mana saja:
+Folder ini sudah berisi **`index.html`** (Swagger UI siap pakai) yang memuat
+`openapi.yaml` di sebelahnya.
 
-- **Swagger Editor online:** buka <https://editor.swagger.io> → File → Import file → pilih `openapi.yaml`.
-- **Swagger UI via Docker:**
-  ```bash
-  docker run --rm -p 8081:8080 \
-    -e SWAGGER_JSON=/spec/openapi.yaml \
-    -v "$(pwd)/docs/api-documentation:/spec" \
-    swaggerapi/swagger-ui
-  # buka http://localhost:8081
-  ```
-- **Redoc (statis):**
-  ```bash
-  npx @redocly/cli preview-docs docs/api-documentation/openapi.yaml
-  ```
+### Lokal
+
+```bash
+# dari root repo — server statis sederhana
+python3 -m http.server 8081 --directory docs/api-documentation
+# buka http://localhost:8081
+```
+
+> Buka lewat HTTP server (bukan `file://`) agar `fetch('./openapi.yaml')` tidak
+> diblokir browser.
+
+### GitHub Pages
+
+`index.html` memuat spec via path **relatif** (`./openapi.yaml`), jadi langsung
+jalan di Pages. Pilih salah satu cara:
+
+1. **Settings → Pages → Source: `Deploy from a branch` → Branch `main` / folder `/docs`.**
+   Swagger akan tampil di:
+   `https://<user>.github.io/<repo>/api-documentation/`
+2. Atau salin `index.html` + `openapi.yaml` ke root branch `gh-pages`.
+
+### Alternatif tanpa file ini
+
+- **Swagger Editor online:** <https://editor.swagger.io> → File → Import file → `openapi.yaml`.
+- **Redoc:** `npx @redocly/cli preview-docs docs/api-documentation/openapi.yaml`
+
+### Catatan "Try it out"
+
+Tombol *Try it out* mengirim request ke server pada `servers:` (default
+`http://localhost:8080`). Bila Swagger dibuka dari domain GitHub Pages sementara
+API berjalan di `localhost`, browser akan memblokir karena **CORS** (server ini
+belum memasang header CORS) — gunakan Postman atau `curl` untuk eksekusi nyata,
+sedangkan Swagger Pages untuk eksplorasi/dokumentasi. Saat `index.html` & API
+disajikan dari origin yang sama, *Try it out* berfungsi penuh.
 
 Untuk mencoba request langsung dari Postman, lihat koleksi di
 [`docs/postman/`](../postman/).
