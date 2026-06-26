@@ -42,6 +42,10 @@ func Conflict(msg string) *AppError {
 	return &AppError{HTTPStatus: http.StatusConflict, Code: "conflict", Message: msg}
 }
 
+func TooManyRequests(msg string) *AppError {
+	return &AppError{HTTPStatus: http.StatusTooManyRequests, Code: "rate_limited", Message: msg}
+}
+
 func UnprocessableEntity(msg string) *AppError {
 	return &AppError{HTTPStatus: http.StatusUnprocessableEntity, Code: "unprocessable", Message: msg}
 }
@@ -76,6 +80,8 @@ func FromDomain(err error) *AppError {
 		return UnprocessableEntity("transisi status pembayaran tidak valid")
 	case errors.Is(err, domain.ErrInvalidSignature):
 		return Unauthorized("signature webhook tidak valid")
+	case errors.Is(err, domain.ErrRateLimited):
+		return TooManyRequests("terlalu sering; coba lagi nanti")
 	default:
 		return Internal()
 	}
