@@ -51,6 +51,7 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 	credRepo := repository.NewCredentialRepository(db)
 	idemRepo := repository.NewIdempotencyRepository(db)
+	outboxRepo := repository.NewOutboxRepository(db)
 	dokuGW := doku.New(doku.Config{
 		BaseURL:   cfg.DOKU.BaseURL,
 		ClientID:  cfg.DOKU.ClientID,
@@ -67,7 +68,7 @@ func main() {
 	}
 	ready := func(ctx context.Context) error { return sqlDB.PingContext(ctx) }
 
-	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey, idemRepo)
+	router := httpadapter.NewRouter(paymentSvc, ready, credRepo, masterKey, idemRepo, outboxRepo)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
