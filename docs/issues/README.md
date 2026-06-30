@@ -23,6 +23,7 @@ acceptance criteria, dan referensi ke dokumen desain.
 | [0010](0010-reconciler-sync.md) | Reconciler + `POST /sync` + DOKU GetStatus | medium | 0008 |
 | [0011](0011-refund-end-to-end.md) | Refund end-to-end + DOKU Refund (per-channel) | medium | 0008 |
 | [0012](0012-observability.md) | Observability dasar (metrik, log, correlation) | medium | 0006 |
+| [0013](0013-doku-doc-corrections.md) | Koreksi dokumen DOKU agar sesuai response live | medium | 0005 |
 
 ## Referensi desain
 

@@ -247,7 +247,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order\": { \"invoice_number\": \"demo-0001\", \"amount\": \"50000.00\" },\n  \"transaction\": { \"status\": \"SUCCESS\", \"original_request_id\": \"<gateway_request_id>\", \"date\": \"2026-06-27T00:00:00Z\" },\n  \"channel\": { \"id\": \"VIRTUAL_ACCOUNT_BCA\" }\n}"
+              "raw": "{\n  \"order\": { \"invoice_number\": \"demo-0001\", \"amount\": \"50000.00\" },\n  \"transaction\": { \"status\": \"SUCCESS\", \"original_request_id\": \"<gateway_request_id>\", \"date\": \"2026-06-27T00:00:00Z\" },\n  \"service\": { \"id\": \"VIRTUAL_ACCOUNT\" },\n  \"channel\": { \"id\": \"VIRTUAL_ACCOUNT_BCA\" },\n  \"acquirer\": { \"id\": \"BCA\" }\n}"
             },
             "url": { "raw": "{{baseUrl}}/v1/webhooks/doku", "host": ["{{baseUrl}}"], "path": ["v1", "webhooks", "doku"] },
             "description": "Receiver notifikasi DOKU (dipanggil GATEWAY, bukan app). Tanpa auth API key — diverifikasi via HMAC signature DOKU di server.\n\nRequest ini hanya untuk DOKUMENTASI bentuk payload/header. Mengirim dari Postman akan 401 kecuali Signature dihitung dengan SecretKey DOKU yang benar. Match transaksi via `transaction.original_request_id` (= gateway_request_id kita)."

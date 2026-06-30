@@ -18,7 +18,8 @@ amount IDR integer; signature request keluar pakai skema HMAC-SHA256 komponen
       `Request-Timestamp`, `Digest`, `Signature` (pakai `Sign`/`Digest`/`ComponentString`).
 - [x] `CreateCharge`: bangun body Checkout (`order.invoice_number` ←
       external_reference, `order.amount` integer rupiah, `payment.payment_due_date`),
-      kirim, parse response → `ChargeResult{PaymentURL, GatewayRequestID, ExpiresAt(expired_date_utc), Status}`.
+      kirim, parse response (dibungkus objek `response`) → `ChargeResult{PaymentURL,
+      GatewayRequestID, ExpiresAt(expired_datetime), Status}`.
 - [x] Map error DOKU → `doku.Error` terstruktur (HTTP status + code + message).
 - [~] Konfig kredensial: saat ini dari `Config` (env via `DOKU_*`). Pengambilan
       dari `gateway_account` terenkripsi menyusul saat usecase wiring (issue 0006).
@@ -27,9 +28,9 @@ amount IDR integer; signature request keluar pakai skema HMAC-SHA256 komponen
 
 - [x] Unit test signer request keluar (komponen string & header benar).
 - [x] Test parsing response (fixture) → `ChargeResult` benar; `ExpiresAt` dari
-      `expired_date_utc`.
-- [~] Smoke test `create_doku_direct_checkout` ditunda: credential MCP sandbox
-      masih ditolak DOKU (spec §9.5). Parser dibuat toleran utk verifikasi nanti.
+      `expired_datetime` (RFC3339), fallback `expired_date` (WIB).
+- [x] Smoke test `create_doku_direct_checkout` (MCP key `doku_…`, 2026-06-30):
+      response sukses, `payment.url` + `expired_datetime` terverifikasi (spec §2/§9.5).
 
 ## File terkait
 
