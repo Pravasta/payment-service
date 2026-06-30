@@ -70,10 +70,12 @@ dengan `component = "{timestamp}\n{METHOD}\n{request_uri}\n{sha256_hex(body)}"`.
 3. **Sync Payment** — refresh status dari gateway (rate-limited 10s/transaksi).
 4. **Refunds** — full (`amount: 0`) atau partial.
 
-> Catatan: Create/Sync/Refund memanggil DOKU sungguhan. Tanpa kredensial DOKU
-> (`DOKU_CLIENT_ID`/`DOKU_SECRET_KEY`) yang valid, panggilan gateway gagal — auth,
-> validasi, idempotency, dan jalur error tetap bisa diuji. Endpoint baca
-> (`Get`/`List`) berfungsi penuh tanpa DOKU.
+> Catatan: Create/Sync/Refund memanggil DOKU sungguhan. Dengan kredensial sandbox
+> valid di `.env` (`DOKU_CLIENT_ID`/`DOKU_SECRET_KEY` — terverifikasi live
+> 2026-06-30, Client-Id `BRN-0252-…`), **Create Payment mengembalikan `payment_url`
+> nyata** (status `pending`) yang bisa dibuka di browser. Tanpa kredensial valid,
+> panggilan gateway gagal — auth, validasi, idempotency, dan jalur error tetap bisa
+> diuji. Endpoint baca (`Get`/`List`) berfungsi penuh tanpa DOKU.
 
 ## Format error
 

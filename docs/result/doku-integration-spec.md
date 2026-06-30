@@ -14,11 +14,13 @@
   `get_transaction_by_date_range`, `get_merchant_payment_methods`.
 - **Tidak ada** tool refund maupun MCP "resource" dokumentasi → poin signature
   webhook & refund dijawab dari dokumentasi publik DOKU.
-- **Untuk panggilan API live lewat MCP** masih perlu header
-  `Authorization: Basic base64(<secret_key>:)` (lihat `scripts/encode-doku-key.sh`).
-  Saat ini call live menolak dengan *"Missing or invalid Authorization header.
-  Expected Basic Auth"* — jadi MCP baru bisa baca-schema, belum bertransaksi.
-  Tambahkan header itu untuk demo transaksi end-to-end (lihat §8).
+- **MCP live ✅ (2026-06-30).** Panggilan API live lewat MCP butuh header
+  `Authorization: Basic base64(<mcpKey>:)`. **Penting:** `mcpKey` adalah kredensial
+  **khusus MCP server** berprefix `doku_…` (±49 char) — **bukan** `DOKU_SECRET_KEY`
+  Checkout (prefix `SK-…`) yang dipakai adapter Go. Dengan `doku_…` + Client-Id
+  `BRN-0252-…`, call seperti `get_merchant_payment_methods` dan
+  `create_doku_direct_checkout` sukses → fakta di dokumen ini **sudah diverifikasi
+  empiris** (lihat contoh response §2).
 
 ---
 
@@ -62,20 +64,44 @@ dengan skema **HMAC-SHA256 berbasis komponen** — bukan sekadar HMAC atas body.
 ## 2. `payment_url` sinkron & format `order_id`  ✅ TERJAWAB
 
 - **`payment.url` dikembalikan SINKRON** pada response yang sama (HTTP 200,
-  `result/payment.status = SUCCESS`) dari create-order Checkout. App boleh
-  langsung redirect. → asumsi alur §1 detailed-design **benar**.
+  `message: ["SUCCESS"]`) dari create-order Checkout. App boleh langsung redirect.
+  → asumsi alur §1 detailed-design **benar**.
+- **Struktur body (live-confirmed 2026-06-30):** semua field dibungkus objek
+  top-level **`response`** — bukan di level atas:
+
+  ```json
+  {
+    "message": ["SUCCESS"],
+    "invoiceNumber": "INV-...",
+    "response": {
+      "order":   { "amount": "50000", "invoice_number": "INV-...", "currency": "IDR",
+                   "session_id": "125f8c84...27bc" },
+      "payment": { "token_id": "125f8c84...781",
+                   "url": "https://staging.doku.com/checkout-link-v2/125f8c84...781",
+                   "payment_due_date": 60,
+                   "expired_date": "20260701003444",          // yyyyMMddHHmmss WIB
+                   "expired_datetime": "2026-06-30T17:34:44Z", // RFC3339 UTC
+                   "type": "SALE" },
+      "headers": { "request_id": "REQ-...", "signature": "HMACSHA256=...",
+                   "client_id": "BRN-0252-..." }
+    }
+  }
+  ```
 - **`order.invoice_number`** = id milik merchant (analog `external_reference` kita):
   - string, **unik per merchant/request**, boleh alfanumerik + karakter spesial,
     **maks 64 char**. `INV-2026-000123` valid.
   - Bila kosong, DOKU MCP meng-autogenerate `AIO-xxxx-xxxxxxxxx`. **Kita selalu
     kirim sendiri** dari `external_reference` agar idempotency & rekonsiliasi rapi.
-- Field response lain yang berguna: `payment.status`, `order.amount`,
-  `peer_to_peer_info.expired_date(_utc)` (lihat §6).
+- Field response lain yang berguna: `response.order.amount`,
+  `response.payment.expired_datetime`/`expired_date` (lihat §6),
+  `response.headers.request_id` (korelasi/audit).
 
 **Dampak ke desain:**
-- Mapping: `transaction.external_reference` → `order.invoice_number`;
-  `transaction.payment_url` ← `payment.url`; `transaction.gateway_txn_id` ←
-  `Request-Id`/identifier DOKU.
+- Mapping: `transaction.external_reference` → `response.order.invoice_number`;
+  `transaction.payment_url` ← `response.payment.url`; `transaction.gateway_txn_id`
+  ← `response.payment.token_id` (atau `response.order.session_id`), **bukan**
+  `Request-Id`. `response.headers.request_id` (`REQ-…`) adalah id request DOKU,
+  terpisah dari token transaksi.
 - Tidak perlu state khusus menunggu URL async — `created → pending` terjadi dalam
   satu panggilan sinkron.
 
@@ -161,17 +187,20 @@ Dua jalur tersedia:
 ## 6. Aturan expiry checkout DOKU vs `expires_at` internal  ✅ TERJAWAB
 
 - **Default kedaluwarsa halaman Checkout = 60 menit** (cocok dengan default
-  `expiry_minutes: 60` di API kita).
-- Durasi diatur lewat field menit di request (mis. `expired_time` /
-  `payment.payment_due_date`), dan response mengembalikan:
-  - `peer_to_peer_info.expired_date` format `yyyyMMddHHmmss`,
-  - `peer_to_peer_info.expired_date_utc` (UTC).
+  `expiry_minutes: 60` di API kita); response meng-echo `response.payment.payment_due_date: 60`.
+- Response mengembalikan **dua** field expiry (live-confirmed 2026-06-30):
+  - `response.payment.expired_datetime` — **RFC3339 UTC**, mis. `2026-06-30T17:34:44Z`.
+  - `response.payment.expired_date` — `yyyyMMddHHmmss` zona **WIB (UTC+7)**,
+    mis. `20260701003444` (= 00:34:44 WIB = 17:34:44 UTC).
+  - ⚠️ **Tidak ada `expired_date_utc` maupun `peer_to_peer_info`** di response
+    Checkout — asumsi lama (pra-kode) keliru.
 
 **Dampak ke desain:**
-- **`transaction.expires_at` diisi dari `expired_date_utc` milik DOKU** (source of
-  truth gateway), **bukan** dihitung lokal `now()+expiry_minutes` — hindari drift
-  antara halaman DOKU dan PS.
-- Reconciler (§6.3) menandai `expired` hanya setelah melewati `expired_date_utc`
+- **`transaction.expires_at` diisi dari `expired_datetime`** (RFC3339 UTC, source of
+  truth gateway), fallback parse `expired_date` (WIB) bila kosong — **bukan**
+  dihitung lokal `now()+expiry_minutes`. Sesuai `parseCheckoutExpiry` di
+  `internal/adapter/gateway/doku/doku.go`.
+- Reconciler (§6.3) menandai `expired` hanya setelah melewati `expired_datetime`
   DOKU **dan** Check Status bukan `SUCCESS`.
 
 ---
@@ -185,7 +214,8 @@ Dua jalur tersedia:
 | `gateway_event_id` ⇐ `Request-Id` (§2.6) | Diperjelas | dokumentasikan mapping |
 | Format amount IDR (§7) | Dikonfirmasi (Checkout) | **tambah** util format per-endpoint (VA 2-desimal) |
 | Refund (§3.2/§8) | Dikonfirmasi sync+async | **tambah** kolom `gateway_request_id`; handle 2 jalur; cek per-channel |
-| `expires_at` (§2.5) | Diubah | isi dari `expired_date_utc` DOKU, bukan lokal |
+| `expires_at` (§2.5) | Diubah | isi dari `expired_datetime` (RFC3339) DOKU, bukan lokal |
+| Struktur response Checkout (§2) | Dikoreksi | dibungkus objek `response.{order,payment,headers}` |
 | `GetStatus` (§4.3/§6.3) | Dikonfirmasi | implement Check Status API; sadar jeda 60s |
 | Auth PS→DOKU | Baru | signer HMAC-SHA256 komponen (sama dgn verifier webhook) |
 
@@ -210,7 +240,8 @@ Menyambung §12 detailed-design, sekarang ter-anchor ke fakta DOKU:
    dipakai dua arah; tulis unit test dengan contoh dari sandbox.
 4. **Adapter DOKU**:
    - `CreateCharge` → Checkout (format amount integer, kirim `invoice_number`,
-     simpan `payment.url`, `expired_date_utc`, `Request-Id`).
+     baca dari `response.{order,payment}`: simpan `payment.url`, `payment.token_id`,
+     `payment.expired_datetime`).
    - `formatAmount` per-endpoint (Checkout integer / VA `.00`).
    - `GetStatus` → `GET /orders/v1/status/{invoice_number}` + mapping status.
    - `Refund` → `/cancellation/credit-card/refund` (pilih VOID/PARTIAL/FULL).
@@ -259,9 +290,11 @@ simpan ketiganya di `transaction_event.payload` untuk reporting).
   sama dua arah. (Catatan: header `Authorization: Basic` yang dipakai adalah auth
   **MCP server**, bukan auth Direct API DOKU untuk adapter Go kita.)
 
-### 9.5. Hanya tersisa verifikasi empiris (saat credential MCP valid)
-- Konfirmasi bentuk nyata `expired_date_utc`, `payment.url`, dan field notifikasi
-  via transaksi sandbox (`create_doku_direct_checkout`).
-- Status MCP live saat ini: credential ditolak DOKU
-  (`error get credential ... apiKey: SK-...`) → perlu Secret Key sandbox yang
-  benar & berpasangan dengan `Client-Id BRN-0276-…` (lihat [[doku-mcp-setup]]).
+### 9.5. Verifikasi empiris — **SELESAI (2026-06-30)** ✅
+- Response Checkout sungguhan dikonfirmasi via `create_doku_direct_checkout`
+  sandbox (`Client-Id BRN-0252-…`, MCP key `doku_…`): struktur `response.{order,
+  payment,headers}`, `payment.url`, `payment.token_id`, `payment.expired_datetime`
+  (RFC3339) + `expired_date` (WIB). Contoh lengkap di §2.
+- Tersisa (opsional, butuh transaksi dibayar): bentuk nyata **payload notifikasi**
+  (`service.id`/`channel.id`/`acquirer.id`, §9.3) & **refund per-channel** (§9.1)
+  — saat ini dari dokumentasi, belum dari transaksi live.
