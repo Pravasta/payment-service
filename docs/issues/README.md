@@ -24,6 +24,7 @@ acceptance criteria, dan referensi ke dokumen desain.
 | [0011](0011-refund-end-to-end.md) | Refund end-to-end + DOKU Refund (per-channel) | medium | 0008 |
 | [0012](0012-observability.md) | Observability dasar (metrik, log, correlation) | medium | 0006 |
 | [0013](0013-doku-doc-corrections.md) | Koreksi dokumen DOKU agar sesuai response live | medium | 0005 |
+| [0014](0014-postman-run-findings.md) | Temuan run Postman: Sync 500 guard + observability gagal-gateway | high | 0006, 0010 |
 
 ## Referensi desain
 
