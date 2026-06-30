@@ -29,18 +29,28 @@ type signedResponse struct {
 func (a *Adapter) doSigned(ctx context.Context, method, target string, body []byte) (signedResponse, error) {
 	ts := a.now().UTC().Format(dokuTimeFormat)
 	reqID := a.newRequestID()
-	digest := Digest(body)
+
+	// DOKU: header & komponen Digest HANYA untuk request ber-body. Untuk GET tanpa
+	// body (mis. Check Status), Digest tidak disertakan — menyertakan digest atas
+	// body kosong membuat DOKU menolak "Invalid Header Signature".
+	hasBody := len(body) > 0
+	var digest string
+	if hasBody {
+		digest = Digest(body)
+	}
 	signature := Sign(a.cfg.SecretKey, ComponentString(a.cfg.ClientID, reqID, ts, target, digest))
 
 	httpReq, err := http.NewRequestWithContext(ctx, method, a.cfg.BaseURL+target, bytes.NewReader(body))
 	if err != nil {
 		return signedResponse{}, fmt.Errorf("doku: build request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Client-Id", a.cfg.ClientID)
 	httpReq.Header.Set("Request-Id", reqID)
 	httpReq.Header.Set("Request-Timestamp", ts)
-	httpReq.Header.Set("Digest", digest)
+	if hasBody {
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Digest", digest)
+	}
 	httpReq.Header.Set("Signature", signature)
 
 	resp, err := a.client.Do(httpReq)
