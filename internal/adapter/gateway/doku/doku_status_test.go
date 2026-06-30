@@ -14,14 +14,16 @@ func TestGetStatus_SignedAndParsed(t *testing.T) {
 	const reqID = "req-status-1"
 	fixedTS := time.Date(2026, 6, 26, 7, 0, 0, 0, time.UTC)
 
-	var gotMethod, gotPath, gotSig string
+	var gotMethod, gotPath, gotSig, gotDigest string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotSig = r.Header.Get("Signature")
+		gotDigest = r.Header.Get("Digest")
 		w.Header().Set("Content-Type", "application/json")
+		// Bentuk nyata Check Status: order.amount berupa ANGKA (bukan string).
 		_, _ = w.Write([]byte(`{
-			"order": {"amount": "150000.00"},
+			"order": {"invoice_number": "INV-2026-001", "amount": 150000, "status": "ORDER_GENERATED"},
 			"transaction": {"status": "SUCCESS"},
 			"channel": {"id": "VIRTUAL_ACCOUNT_BCA"}
 		}`))
@@ -41,10 +43,14 @@ func TestGetStatus_SignedAndParsed(t *testing.T) {
 	if gotPath != "/orders/v1/status/INV-2026-001" {
 		t.Errorf("path = %q", gotPath)
 	}
-	// Signature GET: Digest atas body kosong.
-	wantSig := Sign("SK-test-secret", ComponentString("BRN-0276-TEST", reqID, fixedTS.Format(dokuTimeFormat), "/orders/v1/status/INV-2026-001", Digest(nil)))
+	// Signature GET: TANPA Digest (request tanpa body). DOKU menolak "Invalid
+	// Header Signature" bila Digest disertakan untuk GET.
+	wantSig := Sign("SK-test-secret", ComponentString("BRN-0276-TEST", reqID, fixedTS.Format(dokuTimeFormat), "/orders/v1/status/INV-2026-001", ""))
 	if gotSig != wantSig {
 		t.Errorf("Signature tidak cocok")
+	}
+	if gotDigest != "" {
+		t.Errorf("header Digest tidak boleh diset untuk GET, dapat %q", gotDigest)
 	}
 
 	if res.Status != domain.StatusPaid {

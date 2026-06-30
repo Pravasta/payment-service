@@ -31,6 +31,19 @@ func TestSignAndVerifyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestComponentString_OmitsDigestWhenEmpty(t *testing.T) {
+	base := "Client-Id:CID\nRequest-Id:RID\nRequest-Timestamp:TS\nRequest-Target:/t"
+
+	// GET tanpa body → tanpa baris Digest (DOKU menolak bila disertakan).
+	if got := ComponentString("CID", "RID", "TS", "/t", ""); got != base {
+		t.Errorf("tanpa digest:\n got=%q\nwant=%q", got, base)
+	}
+	// Dengan body → baris Digest disertakan (perilaku POST tetap).
+	if got := ComponentString("CID", "RID", "TS", "/t", "DG"); got != base+"\nDigest:DG" {
+		t.Errorf("dengan digest = %q", got)
+	}
+}
+
 func TestFormatAmount(t *testing.T) {
 	if got := FormatAmount(EndpointCheckout, 50000, "IDR"); got != "50000" {
 		t.Errorf("Checkout amount = %q, want \"50000\"", got)

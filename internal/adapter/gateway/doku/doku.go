@@ -316,8 +316,10 @@ func parseNotifTime(date, headerTS string) time.Time {
 
 // statusResponse adalah subset response Check Status DOKU.
 type statusResponse struct {
+	// Amount bisa berupa ANGKA (Check Status: 50000) ATAU string (notifikasi:
+	// "50000.00") — pakai RawMessage agar tahan kedua bentuk (dinormalkan via rawAmount).
 	Order struct {
-		Amount string `json:"amount"`
+		Amount json.RawMessage `json:"amount"`
 	} `json:"order"`
 	Transaction struct {
 		Status string `json:"status"`
@@ -325,6 +327,12 @@ type statusResponse struct {
 	Channel struct {
 		ID string `json:"id"`
 	} `json:"channel"`
+}
+
+// rawAmount menormalkan amount DOKU yang bisa berupa angka (50000) ATAU string
+// ("50000.00") menjadi string untuk parseAmountMinor.
+func rawAmount(raw json.RawMessage) string {
+	return strings.Trim(string(raw), `"`)
 }
 
 // GetStatus memanggil Check Status DOKU: GET /orders/v1/status/{invoice_number}
@@ -359,7 +367,7 @@ func (a *Adapter) GetStatus(ctx context.Context, ref domain.StatusRef) (domain.S
 	return domain.StatusResult{
 		Status:        mapStatus(parsed.Transaction.Status),
 		PaymentMethod: parsed.Channel.ID,
-		AmountMinor:   parseAmountMinor(parsed.Order.Amount),
+		AmountMinor:   parseAmountMinor(rawAmount(parsed.Order.Amount)),
 		Raw:           rawMap,
 	}, nil
 }

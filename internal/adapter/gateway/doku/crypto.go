@@ -22,15 +22,22 @@ func Digest(rawBody []byte) string {
 //	Request-Id:{requestId}
 //	Request-Timestamp:{requestTimestamp}
 //	Request-Target:{requestTarget}
-//	Digest:{digest}
+//	Digest:{digest}     <- HANYA untuk request ber-body
+//
+// Untuk request tanpa body (mis. GET Check Status), DOKU TIDAK menyertakan baris
+// Digest; panggil dengan digest = "" agar baris itu dihilangkan. Menyertakan
+// Digest atas body kosong membuat DOKU menolak "Invalid Header Signature".
 func ComponentString(clientID, requestID, requestTimestamp, requestTarget, digest string) string {
-	return strings.Join([]string{
+	lines := []string{
 		"Client-Id:" + clientID,
 		"Request-Id:" + requestID,
 		"Request-Timestamp:" + requestTimestamp,
 		"Request-Target:" + requestTarget,
-		"Digest:" + digest,
-	}, "\n")
+	}
+	if digest != "" {
+		lines = append(lines, "Digest:"+digest)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Sign menghasilkan header Signature: "HMACSHA256=" + base64(HMAC-SHA256(secret, component)).

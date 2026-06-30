@@ -25,6 +25,7 @@ acceptance criteria, dan referensi ke dokumen desain.
 | [0012](0012-observability.md) | Observability dasar (metrik, log, correlation) | medium | 0006 |
 | [0013](0013-doku-doc-corrections.md) | Koreksi dokumen DOKU agar sesuai response live | medium | 0005 |
 | [0014](0014-postman-run-findings.md) | Temuan run Postman: Sync 500 guard + observability gagal-gateway | high | 0006, 0010 |
+| [0015](0015-doku-getstatus-signature-amount.md) | DOKU GetStatus: signature GET tanpa Digest + amount angka | high | 0010 |
 
 ## Referensi desain
 
