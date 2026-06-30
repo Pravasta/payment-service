@@ -48,6 +48,12 @@ func (s *Service) SyncPayment(ctx context.Context, appID, id uuid.UUID) (*domain
 	if err != nil {
 		return nil, err
 	}
+	// Status terminal (failed/expired/refunded) tidak bisa berubah lagi → tak perlu
+	// memanggil gateway. Kembalikan transaksi apa adanya (no-op idempoten); ini
+	// mencegah error gateway/transisi pada transaksi final berubah jadi 500.
+	if domain.IsTerminal(txn.Status) {
+		return txn, nil
+	}
 	if !s.syncLimiter.allow(id) {
 		return nil, domain.ErrRateLimited
 	}

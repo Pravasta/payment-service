@@ -77,6 +77,38 @@ func TestSyncPayment_NotFound(t *testing.T) {
 	}
 }
 
+func TestSyncPayment_TerminalSkipsGateway(t *testing.T) {
+	repo := newMockRepo()
+	gw := &mockGateway{statusResult: domain.StatusResult{Status: domain.StatusPaid}}
+	svc := usecase.NewService(repo, nil, gw)
+	// Transaksi terminal (failed) — sync tak boleh memanggil gateway.
+	txn := &domain.Transaction{
+		ID:                uuid.New(),
+		AppID:             uuid.New(),
+		ExternalReference: "INV-TERM-1",
+		Status:            domain.StatusFailed,
+		Currency:          "IDR",
+		GrossAmount:       150000,
+		Gateway:           "doku",
+		CreatedAt:         time.Now().UTC(),
+	}
+	_ = repo.Create(context.Background(), txn)
+
+	got, err := svc.SyncPayment(context.Background(), txn.AppID, txn.ID)
+	if err != nil {
+		t.Fatalf("SyncPayment (terminal): %v", err)
+	}
+	if got.Status != domain.StatusFailed {
+		t.Errorf("status = %q, ingin tetap failed", got.Status)
+	}
+	if gw.statusCalls != 0 {
+		t.Errorf("GetStatus dipanggil %d kali, ingin 0 (terminal di-skip)", gw.statusCalls)
+	}
+	if len(repo.events) != 0 {
+		t.Errorf("tidak boleh ada event untuk no-op terminal, ada %d", len(repo.events))
+	}
+}
+
 func TestReconcilePending_ClosesPaid(t *testing.T) {
 	repo := newMockRepo()
 	gw := &mockGateway{statusResult: domain.StatusResult{Status: domain.StatusPaid, AmountMinor: 150000}}

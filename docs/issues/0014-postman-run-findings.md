@@ -1,6 +1,6 @@
 # 0014 — Temuan run Postman: CreatePayment/Sync 500 + observability gagal-gateway
 
-- **Status:** todo
+- **Status:** done
 - **Prioritas:** high
 - **Depends on:** 0006, 0010
 - **Referensi:** hasil run koleksi Postman 2026-06-30; `internal/usecase/payment/sync.go`, `internal/adapter/gateway/doku/client.go`
@@ -65,20 +65,33 @@ Bahkan setelah key dibetulkan, run ini menyingkap kelemahan nyata:
 
 ## Scope
 
-- [ ] **Guard `/sync`:** tolak/short-circuit transaksi terminal atau tanpa
-      `gateway_request_id` sebelum memanggil gateway; tambahkan unit test.
-- [ ] **Rekam error gateway:** persist ringkasan kegagalan DOKU ke event/log saat
-      CreateCharge & GetStatus gagal (tanpa secret). Test.
-- [ ] (Opsional) Selaraskan status code refund wrong-state (400 → 422) bila disepakati.
-- [ ] Dokumentasikan pembedaan key MCP (`doku_…`) vs Direct API (`DOKU_SECRET_KEY`)
-      di `.env.example` / `docs/postman/README.md` agar tak terulang.
+- [x] **Guard `/sync`:** short-circuit transaksi **terminal** (`failed`/`expired`/
+      `refunded`) sebelum memanggil gateway → no-op idempoten (`sync.go`); unit test
+      `TestSyncPayment_TerminalSkipsGateway`.
+- [x] **Rekam error gateway:** `markFailed` mem-persist `{gateway, error}` ke
+      `transaction_event.payload` saat CreateCharge gagal (tanpa secret); diuji di
+      `TestCreatePayment_GatewayErrorMarksFailed`. Log 5xx di boundary HTTP sudah
+      ada (PR #14) sebagai pelengkap.
+- [~] (Opsional) Status code refund wrong-state (400 → 422): **ditunda** — `400
+      invalid_request` defensibel untuk prakondisi state; tidak diubah agar tak
+      memecah kontrak yang sudah ada.
+- [x] Dokumentasikan pembedaan key MCP (`doku_…`) vs Direct API (`DOKU_SECRET_KEY`)
+      di `.env.example`.
 
 ## Acceptance criteria
 
-- [ ] `POST /sync` atas transaksi `failed`/terminal → respons 4xx yang jelas (bukan 500).
-- [ ] Kegagalan create-charge meninggalkan jejak alasan (event payload/log) yang
+- [x] `POST /sync` atas transaksi `failed`/terminal → no-op `200` (bukan 500).
+- [x] Kegagalan create-charge meninggalkan jejak alasan (`payload.error`) yang
       cukup untuk diagnosis tanpa membaca kode.
-- [ ] `make test` hijau; `/check` lolos.
+- [x] `make test` hijau; `/check` lolos.
+
+## Catatan implementasi
+
+- Guard sync hanya menyaring status **terminal**. Transaksi non-terminal tanpa
+  `gateway_request_id` tetap boleh sync karena DOKU Check Status dapat memakai
+  `invoice_number` (= `external_reference`).
+- Reuse: `markFailed` kini menerima `cause error`; satu-satunya pemanggil
+  (`CreatePayment`) meneruskan error gateway.
 
 ## Di luar scope
 
