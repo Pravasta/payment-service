@@ -137,7 +137,7 @@ func (s *Service) CreatePayment(ctx context.Context, in CreatePaymentInput) (*do
 	})
 	if err != nil {
 		// Gateway gagal → transisi created → failed (audit), kembalikan error.
-		s.markFailed(ctx, txn)
+		s.markFailed(ctx, txn, err)
 		return nil, fmt.Errorf("gateway create charge: %w", err)
 	}
 
@@ -157,7 +157,10 @@ func (s *Service) CreatePayment(ctx context.Context, in CreatePaymentInput) (*do
 }
 
 // markFailed mentransisikan transaksi ke failed (best-effort audit saat gateway error).
-func (s *Service) markFailed(ctx context.Context, txn *domain.Transaction) {
+// cause direkam ke payload event agar alasan kegagalan gateway dapat didiagnosis
+// dari audit trail (DB), bukan hanya dari log proses. Pesan error gateway berisi
+// kode/pesan dari DOKU — tidak memuat secret kita.
+func (s *Service) markFailed(ctx context.Context, txn *domain.Transaction, cause error) {
 	if !domain.CanTransition(txn.Status, domain.StatusFailed) {
 		return
 	}
@@ -167,7 +170,11 @@ func (s *Service) markFailed(ctx context.Context, txn *domain.Transaction) {
 	txn.FailedAt = &now
 	txn.UpdatedAt = now
 	_ = s.repo.Update(ctx, txn)
-	s.appendEvent(ctx, txn, domain.EventFailed, from, domain.StatusFailed, nil)
+	var payload map[string]any
+	if cause != nil {
+		payload = map[string]any{"gateway": txn.Gateway, "error": cause.Error()}
+	}
+	s.appendEvent(ctx, txn, domain.EventFailed, from, domain.StatusFailed, payload)
 }
 
 // appendEvent menulis transaction_event (append-only, audit trail). Best-effort:

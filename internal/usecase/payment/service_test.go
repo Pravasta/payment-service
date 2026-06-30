@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -467,5 +468,19 @@ func TestCreatePayment_GatewayErrorMarksFailed(t *testing.T) {
 	ets := repo.eventTypes()
 	if len(ets) != 2 || ets[0] != domain.EventCreated || ets[1] != domain.EventFailed {
 		t.Errorf("events = %v, ingin [created failed]", ets)
+	}
+
+	// Event failed harus merekam alasan gateway untuk diagnosis (audit trail).
+	failed := repo.events[len(repo.events)-1]
+	if failed.Payload == nil {
+		t.Fatal("event failed payload nil — alasan gateway tidak terekam")
+	}
+	if got, ok := failed.Payload["error"].(string); !ok || got == "" {
+		t.Errorf("payload.error = %v, ingin pesan error gateway", failed.Payload["error"])
+	} else if !strings.Contains(got, "doku down") {
+		t.Errorf("payload.error = %q, ingin memuat penyebab 'doku down'", got)
+	}
+	if failed.Payload["gateway"] != "doku" {
+		t.Errorf("payload.gateway = %v, ingin doku", failed.Payload["gateway"])
 	}
 }
