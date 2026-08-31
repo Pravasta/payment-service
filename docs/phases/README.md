@@ -14,11 +14,12 @@ docs/phases/NNN-slug/
 
 | Phase | Judul | Branch | Status | PR |
 |---|---|---|---|---|
-| — | _belum ada phase yang dibuka_ | — | — | — |
+| [000](000-kesepakatan-dokumen/) | Kesepakatan & Dokumen (kunci ADR K1–K9, triase issue v1) | `docs/phase-000-kesepakatan-dokumen` | review | — |
 
 Status: `planned` → `in-progress` → `review` → `done`.
 
-Rencana phase 0–8 untuk rombakan v2 ada di
+Keputusan yang sudah dikunci ada di [`docs/adr/`](../adr/) — itu rujukan utama
+saat menulis kode. Rencana phase 0–8 untuk rombakan v2 ada di
 [`docs/brainstorming/0002-rombak-v2-doku-only.md` §10](../brainstorming/0002-rombak-v2-doku-only.md).
 
 ## Aturan

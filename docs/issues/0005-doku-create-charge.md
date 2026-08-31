@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0002
 - **Referensi:** doku-integration-spec §1, §2, §4
+- **Triase rombakan v2:** berlaku — disederhanakan di Phase 2 (ADR-0001)
+- **Alasan triase:** Hosted Checkout dikonfirmasi sebagai satu-satunya gaya integrasi (ADR-0006); yang dilepas hanya lapisan terjemahan canonical-nya.
 
 ## Konteks
 

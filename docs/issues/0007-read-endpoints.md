@@ -5,6 +5,8 @@
 - **Estimasi:** S
 - **Depends on:** 0006
 - **Referensi:** detailed-design §4.2, §4.5
+- **Triase rombakan v2:** dikerjakan ulang di Phase 3
+- **Alasan triase:** `GET /v1/transactions` dilebur ke `GET /v1/payments` supaya hanya ada satu istilah di kontrak API v2.
 
 ## Konteks
 

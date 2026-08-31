@@ -4,6 +4,19 @@
 > Status: Diskusi arsitektur (belum implementasi).
 > Tanggal: 2026-06-22.
 
+> ## ⚠️ Status: sebagian usang (2026-08-31)
+>
+> Review ini menjawab brainstorming v1, yang mengasumsikan **multi-gateway** dan
+> **dashboard revenue lintas aplikasi**. Kedua asumsi itu dibatalkan rombakan v2.
+>
+> Yang **masih relevan**: analisis batas tanggung jawab payment service, pembagian
+> data ownership dengan aplikasi pemanggil, dan pembahasan idempotency/reliability.
+>
+> Yang **tidak lagi berlaku**: seluruh pembahasan portabilitas antar-gateway,
+> anti-corruption layer canonical, dan fondasi analytics/dashboard.
+>
+> Arah yang berlaku: `docs/brainstorming/0002-rombak-v2-doku-only.md` dan `docs/adr/`.
+
 Dokumen ini menjawab seluruh poin di `docs/brainstorming/brainstorming.md`:
 review ide awal, kritik, alternatif desain, trade-off, rekomendasi MVP, evolusi
 6–24 bulan, dan hal-hal penting yang berpotensi terlewat.

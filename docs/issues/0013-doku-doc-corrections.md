@@ -5,6 +5,8 @@
 - **Estimasi:** S
 - **Depends on:** 0005 (sudah done; ini koreksi dokumentasinya)
 - **Referensi:** detailed-design §11, doku-integration-spec §2/§6, kode `internal/adapter/gateway/doku/doku.go` (PR #15)
+- **Triase rombakan v2:** berlaku
+- **Alasan triase:** Koreksi dokumen atas response live DOKU tetap sahih dan jadi salah satu dasar bukti ADR-0006.
 
 ## Konteks
 

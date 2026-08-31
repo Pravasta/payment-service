@@ -7,6 +7,7 @@ diperluas. Desain lengkap ada di `docs/`:
 - `docs/brainstorming/` — ide & konteks awal, termasuk
   `0002-rombak-v2-doku-only.md` (arah rombakan v2: DOKU-only, payment + hook)
 - `docs/phases/` — unit pekerjaan berjalan (PRD + TD + tasks per phase)
+- `docs/adr/` — **keputusan arsitektur yang berlaku** (rujukan utama saat menulis kode)
 - `docs/result/architecture-review.md` — review arsitektur
 - `docs/result/detailed-design.md` — desain detail (skema, API, state machine)
 - `docs/result/doku-integration-spec.md` — fakta DOKU & dampaknya ke desain

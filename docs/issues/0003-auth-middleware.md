@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0001, 0002
 - **Referensi:** detailed-design §9, architecture-review §8.1
+- **Triase rombakan v2:** dikerjakan ulang di Phase 1 — ADR-0002
+- **Alasan triase:** Logika API key + scope + HMAC tetap berlaku, tapi middleware-nya ditulis ulang ke `gin.HandlerFunc`.
 
 ## Konteks
 

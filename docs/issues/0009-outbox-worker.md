@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0008
 - **Referensi:** detailed-design §4.7, §6.2
+- **Triase rombakan v2:** berlaku — dipindah ke `service/notification` di Phase 1
+- **Alasan triase:** Kontrak retry/DLQ-nya justru dikunci jadi keputusan resmi di ADR-0007.
 
 ## Konteks
 

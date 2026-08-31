@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0008
 - **Referensi:** detailed-design §4.3, §6.3, doku-integration-spec §5, §6
+- **Triase rombakan v2:** berlaku — dipindah di Phase 1, ditinjau di Phase 3
+- **Alasan triase:** Reconciler dan `/sync` tetap jadi jaring pengaman di v2; tidak ada keputusan yang membatalkannya.
 
 ## Konteks
 

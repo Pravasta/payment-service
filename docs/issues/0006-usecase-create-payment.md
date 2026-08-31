@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0003, 0004, 0005
 - **Referensi:** detailed-design §1, §4.1
+- **Triase rombakan v2:** dikerjakan ulang di Phase 1 & 3 — ADR-0003
+- **Alasan triase:** `usecase` menjadi `service`, dan request bertambah field opsional `allowed_channels` (ADR-0006, masih asumsi).
 
 ## Konteks
 

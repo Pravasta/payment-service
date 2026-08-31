@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** —
 - **Referensi:** detailed-design §2
+- **Triase rombakan v2:** dikerjakan ulang di Phase 2 — sebagian superseded oleh ADR-0004 & ADR-0009
+- **Alasan triase:** Tabel-tabelnya tetap dibutuhkan, tapi `merchant` menjadi `app` dan kolom `gateway` dibuang, jadi skemanya disentuh ulang.
 
 ## Konteks
 
