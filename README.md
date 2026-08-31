@@ -4,7 +4,9 @@ Service pembayaran terpusat (Go + PostgreSQL + Docker) untuk banyak aplikasi Saa
 internal, dengan DOKU sebagai gateway pertama di balik interface yang bisa
 diperluas. Desain lengkap ada di `docs/`:
 
-- `docs/brainstorming/brainstorming.md` — ide & konteks awal
+- `docs/brainstorming/` — ide & konteks awal, termasuk
+  `0002-rombak-v2-doku-only.md` (arah rombakan v2: DOKU-only, payment + hook)
+- `docs/phases/` — unit pekerjaan berjalan (PRD + TD + tasks per phase)
 - `docs/result/architecture-review.md` — review arsitektur
 - `docs/result/detailed-design.md` — desain detail (skema, API, state machine)
 - `docs/result/doku-integration-spec.md` — fakta DOKU & dampaknya ke desain

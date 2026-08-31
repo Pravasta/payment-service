@@ -7,6 +7,10 @@ acceptance criteria, dan referensi ke dokumen desain.
 > Konvensi status: `todo` → `in-progress` → `done`. Update field **Status** di
 > tiap file saat dikerjakan.
 
+> Temuan yang muncul di tengah phase **diparkir** ke sini lewat skill
+> `/park-issue` dan dikerjakan setelah phase selesai (skill `/phase-close`),
+> masing-masing di branch `fix/issue-NNNN-*` dengan PR sendiri.
+
 ## Daftar issue
 
 | # | Judul | Prioritas | Depends on |
