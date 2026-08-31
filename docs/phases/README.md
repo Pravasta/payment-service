@@ -14,7 +14,7 @@ docs/phases/NNN-slug/
 
 | Phase | Judul | Branch | Status | PR |
 |---|---|---|---|---|
-| — | _belum ada phase yang dibuka_ | — | — | — |
+| [000](000-kesepakatan-dokumen/) | Kesepakatan & Dokumen (kunci ADR K1–K9, triase issue v1) | `docs/phase-000-kesepakatan-dokumen` | in-progress | — |
 
 Status: `planned` → `in-progress` → `review` → `done`.
 
