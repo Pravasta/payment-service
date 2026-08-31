@@ -31,6 +31,7 @@ acceptance criteria, dan referensi ke dokumen desain.
 | [0014](0014-postman-run-findings.md) | Temuan run Postman: Sync 500 guard + observability gagal-gateway | done | berlaku — diverifikasi di Phase 8 |
 | [0015](0015-doku-getstatus-signature-amount.md) | DOKU GetStatus: signature GET tanpa Digest + amount angka | done | berlaku — jaga dari regresi di Phase 2 |
 | [0016](0016-retensi-tabel-append-only.md) | Kebijakan retensi `transaction_event` & `webhook_inbox` | todo | keep → setelah Phase 8 |
+| [0017](0017-lint-belum-bersih.md) | `make lint` belum bersih (57 temuan pre-existing) | todo | keep → bersamaan Phase 1 |
 
 ## Hasil triase rombakan v2 (Phase 000)
 
@@ -44,8 +45,8 @@ bawah keputusan v2?** Tiga kemungkinan:
 - **superseded oleh ADR-NNNN** — sebagian hasilnya dibatalkan keputusan v2.
 
 Alasan per issue ada di baris `Triase rombakan v2` di masing-masing file.
-Tidak ada issue yang `dropped`. Issue 0016 lahir dari Phase 000 sendiri
-(konsekuensi ADR-0009), bukan warisan v1.
+Tidak ada issue yang `dropped`. Issue 0016 dan 0017 lahir saat Phase 000
+berjalan (konsekuensi ADR-0009 dan temuan lint pre-existing), bukan warisan v1.
 
 ## Referensi desain
 

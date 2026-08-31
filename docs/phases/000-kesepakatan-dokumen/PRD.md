@@ -1,6 +1,6 @@
 # Phase 000 — Kesepakatan & Dokumen · PRD
 
-- **Status:** in-progress
+- **Status:** review
 - **Branch:** `docs/phase-000-kesepakatan-dokumen`
 - **Tracking issue:** #22
 - **Depends on:** —
@@ -64,9 +64,23 @@ Tiga hal yang membuat Phase 1 tidak aman dimulai sekarang:
 - [ ] `detailed-design.md` dan `architecture-review.md` punya banner status di
       bagian paling atas.
 - [ ] `docs/phases/README.md` terisi baris Phase 000.
-- [ ] `gofmt -l .` bersih, `go build ./...` sukses (tidak ada file Go yang berubah).
+- [ ] `gofmt -l .` bersih, `go build ./...` dan `go test ./...` sukses (tidak ada file Go yang berubah).
+- [ ] `make lint` — **gagal, pre-existing**: 57 temuan yang jumlahnya identik di `main`. Diparkir sebagai issue 0017, bukan diperbaiki di phase dokumentasi.
 - [ ] Tidak ada perubahan di `docs/api-documentation/` & `docs/postman/`.
 
 ## 6. Di luar cakupan / diparkir
 
-Diisi saat phase ditutup.
+- [0016](../../issues/0016-retensi-tabel-append-only.md) (#29) — kebijakan retensi
+  `transaction_event` & `webhook_inbox`. Lahir dari ADR-0009 sendiri; dijadwalkan
+  setelah Phase 8.
+- [0017](../../issues/0017-lint-belum-bersih.md) (#30) — `make lint` gagal dengan 57
+  temuan **pre-existing** (jumlah identik di `main`); Phase 000 nol menyentuh file
+  Go. Dijadwalkan bersamaan Phase 1.
+
+## 7. Catatan pelaksanaan
+
+Satu asumsi di PRD ini meleset: triase diperkirakan akan memilah issue yang masih
+terbuka, padahal **ke-15 issue sudah berstatus `done`**. Triasenya karena itu
+menjawab pertanyaan lain — apakah hasilnya masih berlaku di bawah keputusan v2.
+Hasilnya: 10 `berlaku`, 5 `dikerjakan ulang` (pindah paket/framework/nama tabel),
+0 `dropped`.

@@ -5,6 +5,13 @@
 > `docs/issues/` untuk langkah lanjutan yang dipecah satu per satu.
 > Tanggal: 2026-06-22.
 
+> ## ⚠️ Status: struktur folder digantikan rombakan v2 (2026-08-31)
+>
+> Layout `internal/adapter/…` + `internal/usecase/…` yang dijelaskan di sini
+> digantikan layout flat by-layer `internal/{handler,service,repository,gateway,domain}`
+> (ADR-0003), dan chi digantikan Gin (ADR-0002). Prinsip arah dependensi-nya tetap
+> berlaku. Migrasinya dieksekusi di Phase 1.
+
 ## 1. Tujuan
 
 Menyiapkan **struktur, wiring, dan fondasi teknis** yang rapi sebelum mengisi

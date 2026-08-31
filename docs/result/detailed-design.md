@@ -5,6 +5,25 @@
 > bukan implementasi.
 > Tanggal: 2026-06-22.
 
+> ## ⚠️ Status: sebagian digantikan rombakan v2 (2026-08-31)
+>
+> Dokumen ini ditulis untuk desain v1 (multi-gateway + fondasi dashboard revenue).
+> Keputusan yang berlaku sekarang ada di **`docs/adr/`**.
+>
+> | Bagian | Status di v2 |
+> |---|---|
+> | §2 Data Model | **sebagian berlaku** — `merchant` menjadi `app` (ADR-0004), kolom `gateway` dibuang (ADR-0001, ADR-0009) |
+> | §3 State Machine | **berlaku** — `payment.Status` & `CanTransition` dipertahankan (ADR-0001) |
+> | §4 Kontrak API | **sebagian berlaku** — `GET /v1/transactions` dilebur ke `GET /v1/payments`; `GET /v1/events` ditambahkan (ADR-0007) |
+> | §5 Idempotency | **berlaku** |
+> | §6 Webhook/Outbox/Polling | **berlaku** — dikunci di ADR-0007 |
+> | §7 Multi-Currency | **berlaku**, tapi hanya IDR yang diuji |
+> | §8 Refund | **berlaku** |
+> | §9 Security & Secrets | **berlaku** — diperluas ADR-0005 (kredensial per-app) |
+> | §10 Pemetaan Invoice SaaS | **usang** — aplikasi pertama kini CRM |
+> | §11 Yang belum final | **usang** — sudah terjawab di `doku-integration-spec.md` |
+> | Abstraksi multi-gateway (seluruh dokumen) | **dibuang** (ADR-0001) |
+
 ## 0. Keputusan yang Dikunci (dari §13 review)
 
 | # | Keputusan | Implikasi desain |
