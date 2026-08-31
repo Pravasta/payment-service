@@ -5,6 +5,8 @@
 - **Estimasi:** L
 - **Depends on:** 0006
 - **Referensi:** detailed-design §6.1, doku-integration-spec §1, §5, §9
+- **Triase rombakan v2:** berlaku — dipindah di Phase 1, diperluas di Phase 4
+- **Alasan triase:** Verifikasi signature dan state machine tetap sama; yang berubah hanya lokasi paket dan gaya handler.
 
 ## Konteks
 

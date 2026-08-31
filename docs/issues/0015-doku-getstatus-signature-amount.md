@@ -4,6 +4,8 @@
 - **Prioritas:** high
 - **Depends on:** 0010
 - **Referensi:** verifikasi live run Postman 2026-06-30 (#8 Sync 500); `internal/adapter/gateway/doku/client.go`, `crypto.go`, `doku.go`
+- **Triase rombakan v2:** berlaku — jaga agar tidak regresi di Phase 2
+- **Alasan triase:** Signature GET tanpa Digest adalah detail halus yang mudah hilang saat adapter DOKU disederhanakan.
 
 ## Konteks
 

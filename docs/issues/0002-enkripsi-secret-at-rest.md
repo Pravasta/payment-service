@@ -5,6 +5,8 @@
 - **Estimasi:** S
 - **Depends on:** 0001
 - **Referensi:** detailed-design §9, doku-integration-spec §8
+- **Triase rombakan v2:** berlaku
+- **Alasan triase:** Enkripsi AES-GCM justru jadi fondasi ADR-0005 (kredensial DOKU per-app terenkripsi); tidak ada yang berubah.
 
 ## Konteks
 

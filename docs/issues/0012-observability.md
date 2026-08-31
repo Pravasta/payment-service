@@ -5,6 +5,8 @@
 - **Estimasi:** S
 - **Depends on:** 0006
 - **Referensi:** detailed-design §12, architecture-review §9.10
+- **Triase rombakan v2:** berlaku — middleware di-port di Phase 1, diperluas di Phase 7
+- **Alasan triase:** Metrik, correlation id, dan log terstruktur tetap; hanya bentuk middleware-nya yang mengikuti Gin.
 
 ## Konteks
 

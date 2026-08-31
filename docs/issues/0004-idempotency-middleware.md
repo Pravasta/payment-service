@@ -5,6 +5,8 @@
 - **Estimasi:** M
 - **Depends on:** 0001
 - **Referensi:** detailed-design §5
+- **Triase rombakan v2:** dikerjakan ulang di Phase 1 — ADR-0002
+- **Alasan triase:** Perilaku idempotency tetap; port ke Gin butuh perhatian khusus karena body request harus bisa dibaca lebih dari sekali.
 
 ## Konteks
 

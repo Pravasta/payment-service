@@ -5,6 +5,8 @@
 - **Estimasi:** L
 - **Depends on:** 0008
 - **Referensi:** detailed-design §3.2, §8, doku-integration-spec §3, §9.1
+- **Triase rombakan v2:** berlaku — ditinjau di Phase 5
+- **Alasan triase:** ADR-0001 justru melegalkan `RefundType` bicara istilah DOKU, jadi tidak perlu lagi disamarkan sebagai model canonical.
 
 ## Konteks
 

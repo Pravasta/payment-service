@@ -4,6 +4,8 @@
 - **Prioritas:** high
 - **Depends on:** 0006, 0010
 - **Referensi:** hasil run koleksi Postman 2026-06-30; `internal/usecase/payment/sync.go`, `internal/adapter/gateway/doku/client.go`
+- **Triase rombakan v2:** berlaku — diverifikasi ulang di Phase 8
+- **Alasan triase:** Perbaikannya sudah masuk; koleksi Postman-nya baru disentuh lagi saat sinkronisasi dokumentasi di phase terakhir.
 
 ## Konteks
 
