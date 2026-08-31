@@ -30,10 +30,11 @@ acceptance criteria, dan referensi ke dokumen desain.
 | [0013](0013-doku-doc-corrections.md) | Koreksi dokumen DOKU agar sesuai response live | done | berlaku |
 | [0014](0014-postman-run-findings.md) | Temuan run Postman: Sync 500 guard + observability gagal-gateway | done | berlaku — diverifikasi di Phase 8 |
 | [0015](0015-doku-getstatus-signature-amount.md) | DOKU GetStatus: signature GET tanpa Digest + amount angka | done | berlaku — jaga dari regresi di Phase 2 |
+| [0016](0016-retensi-tabel-append-only.md) | Kebijakan retensi `transaction_event` & `webhook_inbox` | todo | keep → setelah Phase 8 |
 
 ## Hasil triase rombakan v2 (Phase 000)
 
-Ke-15 issue di atas sudah berstatus `done` saat rombakan v2 dimulai, jadi
+Ke-15 issue pertama di atas sudah berstatus `done` saat rombakan v2 dimulai, jadi
 triasenya menjawab pertanyaan yang berbeda: **apakah hasilnya masih berlaku di
 bawah keputusan v2?** Tiga kemungkinan:
 
@@ -43,7 +44,8 @@ bawah keputusan v2?** Tiga kemungkinan:
 - **superseded oleh ADR-NNNN** — sebagian hasilnya dibatalkan keputusan v2.
 
 Alasan per issue ada di baris `Triase rombakan v2` di masing-masing file.
-Tidak ada issue yang `dropped`.
+Tidak ada issue yang `dropped`. Issue 0016 lahir dari Phase 000 sendiri
+(konsekuensi ADR-0009), bukan warisan v1.
 
 ## Referensi desain
 
